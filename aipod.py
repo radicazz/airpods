@@ -12,6 +12,7 @@ from aipod import __version__
 from aipod import podman
 from aipod.config import SERVICES, ServiceSpec, get_service, list_service_names
 from aipod.logging import console, status_spinner
+from aipod import state
 from aipod.system import CheckResult, check_dependency, detect_gpu
 
 app = typer.Typer(
@@ -81,6 +82,11 @@ def init() -> None:
         for spec in SERVICES.values():
             podman.pull_image(spec.image)
 
+    # Security: ensure a persistent secret key for Open WebUI sessions.
+    with status_spinner("Preparing Open WebUI secret"):
+        secret = state.ensure_webui_secret()
+    console.print(f"[info]Open WebUI secret stored at {state.config_dir() / 'webui_secret'}[/]")
+
     console.print(Panel.fit("[ok]init complete. pods are ready to start.[/]", border_style="green"))
 
 
@@ -109,11 +115,14 @@ def start(
             podman.ensure_pod(spec.pod, spec.ports)
         with status_spinner(f"Starting {spec.name}"):
             use_gpu = spec.needs_gpu and gpu_available and not force_cpu
+            env = dict(spec.env)
+            if spec.name == "open-webui":
+                env["WEBUI_SECRET_KEY"] = state.ensure_webui_secret()
             podman.run_container(
                 pod=spec.pod,
                 name=spec.container,
                 image=spec.image,
-                env=spec.env,
+                env=env,
                 volumes=spec.volumes,
                 gpu=use_gpu,
             )

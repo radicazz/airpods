@@ -26,6 +26,8 @@ Note: use `./podcli ...` for a convenient wrapper that prefers `uv run` (falls b
 
 Images are referenced with fully-qualified registries: `docker.io/ollama/ollama:latest` and `ghcr.io/open-webui/open-webui:latest`.
 
+Security: `init` generates and persists an Open WebUI secret at `~/.config/aipod/webui_secret` (or `$XDG_CONFIG_HOME/aipod/webui_secret`) and injects it when starting the WebUI container.
+
 ## Roadmap
 - Core commands: `init`, `start`, `stop`, `status`, `logs`.
 - Service definitions: Ollama pod (GGUF-ready) and Open WebUI pod linked to Ollama.
