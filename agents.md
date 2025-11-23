@@ -5,7 +5,7 @@ Provide a Rich + Typer-powered CLI (`aipod.py`) that orchestrates local AI servi
 
 ## Command Surface (planned)
 - `init`: Verify dependencies (podman, podman-compose, uv, optional nvidia-smi), create volumes, pull images, summarize readiness.
-- `start [service...]`: Launch pods (default both). GPU auto-detected and attached to Ollama; CPU fallback allowed.
+- `start [service...]`: Ensure volumes/images, then launch pods (default both). GPU auto-detected and attached to Ollama; CPU fallback allowed.
 - `stop [service...]`: Graceful stop; optional removal of pods while preserving volumes by default.
 - `status [service...]`: Rich table showing pod/container state, ports, uptime, health.
 - `logs [service...]`: Tail logs for specified services or all; supports follow/since/lines.
@@ -18,7 +18,7 @@ Provide a Rich + Typer-powered CLI (`aipod.py`) that orchestrates local AI servi
 
 ## Data & Images
 - Volumes: `aipod_ollama_data` for models, `aipod_webui_data` for Open WebUI data.
-- Images: `ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`; pulled during `init`.
+- Images: `ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`; pulled during `init`/`start`.
 
 ## Testing Approach
 - Unit tests mock subprocess interactions to validate command flow and flags.
