@@ -24,7 +24,7 @@ SERVICES: Dict[str, ServiceSpec] = {
         name="ollama",
         pod="aipod-ollama",
         container="aipod-ollama-0",
-        image="ollama/ollama:latest",
+        image="docker.io/ollama/ollama:latest",
         ports=[(11434, 11434)],
         env={
             "OLLAMA_ORIGINS": "*",

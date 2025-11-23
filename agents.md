@@ -18,7 +18,7 @@ Provide a Rich + Typer-powered CLI (`aipod.py`) that orchestrates local AI servi
 
 ## Data & Images
 - Volumes: `aipod_ollama_data` for models, `aipod_webui_data` for Open WebUI data.
-- Images: `ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`; pulled during `init`/`start`.
+- Images: `docker.io/ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`; pulled during `init`/`start`.
 
 ## Testing Approach
 - Unit tests mock subprocess interactions to validate command flow and flags.

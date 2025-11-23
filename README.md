@@ -22,6 +22,8 @@ Rich, user-friendly CLI for orchestrating local AI services with Podman and UV. 
 - `logs [service...]` — tails logs; supports `--follow`, `--since`, `--lines`.
 - `version` — prints CLI version.
 
+Images are referenced with fully-qualified registries: `docker.io/ollama/ollama:latest` and `ghcr.io/open-webui/open-webui:latest`.
+
 ## Roadmap
 - Core commands: `init`, `start`, `stop`, `status`, `logs`.
 - Service definitions: Ollama pod (GGUF-ready) and Open WebUI pod linked to Ollama.
