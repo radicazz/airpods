@@ -1,3 +1,9 @@
+# Private dev files
+private/
+
+# Uvicorn
+uv.lock
+
 # Byte-compiled / cache
 __pycache__/
 *.py[cod]
@@ -25,3 +31,4 @@ build/
 
 # Podman / containers
 podman-machine-default*
+uv.lock

@@ -17,14 +17,14 @@ class ServiceSpec:
     health_path: Optional[str] = None
 
 
-OLLAMA_VOLUME = "aipod_ollama_data"
-OPENWEBUI_VOLUME = "aipod_webui_data"
+OLLAMA_VOLUME = "airpod_ollama_data"
+OPENWEBUI_VOLUME = "airpod_webui_data"
 
 SERVICES: Dict[str, ServiceSpec] = {
     "ollama": ServiceSpec(
         name="ollama",
-        pod="aipod-ollama",
-        container="aipod-ollama-0",
+        pod="airpod-ollama",
+        container="airpod-ollama-0",
         image="docker.io/ollama/ollama:latest",
         ports=[(11434, 11434)],
         env={
@@ -37,8 +37,8 @@ SERVICES: Dict[str, ServiceSpec] = {
     ),
     "open-webui": ServiceSpec(
         name="open-webui",
-        pod="aipod-open-webui",
-        container="aipod-open-webui-0",
+        pod="airpod-open-webui",
+        container="airpod-open-webui-0",
         image="ghcr.io/open-webui/open-webui:latest",
         ports=[(3000, 8080)],
         env={

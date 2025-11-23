@@ -8,8 +8,8 @@ from pathlib import Path
 def config_dir() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME")
     if base:
-        return Path(base) / "aipod"
-    return Path.home() / ".config" / "aipod"
+        return Path(base) / "airpod"
+    return Path.home() / ".config" / "airpod"
 
 
 def ensure_config_dir() -> Path:

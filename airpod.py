@@ -8,12 +8,12 @@ import typer
 from rich.panel import Panel
 from rich.table import Table
 
-from aipod import __version__
-from aipod import podman
-from aipod.config import SERVICES, ServiceSpec, get_service, list_service_names
-from aipod.logging import console, status_spinner
-from aipod import state
-from aipod.system import CheckResult, check_dependency, detect_gpu
+from airpod import __version__
+from airpod import podman
+from airpod.config import SERVICES, ServiceSpec, get_service, list_service_names
+from airpod.logging import console, status_spinner
+from airpod import state
+from airpod.system import CheckResult, check_dependency, detect_gpu
 
 app = typer.Typer(
     help="Orchestrate local AI services (Ollama, Open WebUI) with Podman + UV.",
@@ -55,7 +55,7 @@ def _ensure_podman_available() -> None:
 @app.command()
 def version() -> None:
     """Show CLI version."""
-    console.print(f"aipod {__version__}")
+    console.print(f"airpod {__version__}")
 
 
 @app.command()

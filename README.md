@@ -1,39 +1,50 @@
-# aipod
+# airpod
 
-Rich, user-friendly CLI for orchestrating local AI services with Podman and UV. The initial focus is running Ollama (GGUF-capable) and Open WebUI in pods with sane defaults and simple lifecycle commands.
+Rich, user-friendly CLI for orchestrating local AI services with Podman and Python (uv). The initial focus is running Ollama (GGUF-capable) and Open WebUI in pods with sane defaults and simple lifecycle commands.
 
-## Goals
-- One-command setup and start: `uv run aipod.py init` and `uv run aipod.py start`.
+## Features
+
+- One-command setup and start: `uv run airpod.py init` and `uv run airpod.py start`.
 - GPU-aware: detect NVIDIA GPUs and attach to pods when available; gracefully fall back to CPU.
 - Opinionated but extensible: defaults for ports/volumes/images, easy to extend with future services like ComfyUI.
 - Helpful output: Rich-powered status tables, clear errors, and direct pointers to next steps.
 
-## Quickstart (planned)
-1. Install prerequisites: Podman, Podman Compose (optional), UV, NVIDIA drivers (if GPU).
-2. `uv run aipod.py init` to verify tools, create volumes, and pre-pull images.
-3. `uv run aipod.py start` to launch Ollama + Open WebUI pods.
-4. `uv run aipod.py status` to view health and ports; `uv run aipod.py logs` to inspect.
+## Getting Started
 
-Note: use `./podcli ...` for a convenient wrapper that prefers `uv run` (falls back to `python`).
+Make sure you have the following:
 
-## Commands (current scaffold)
-- `init` — checks dependencies (podman, podman-compose optional, uv), ensures volumes, and pulls images.
-- `start [service...]` — ensures volumes/images, starts pods (default both); GPU auto-detected unless `--cpu`.
-- `stop [service...]` — stops pods; `--remove` removes pods after stop.
-- `status [service...]` — reports pod status, ports, container counts, and a simple HTTP ping.
-- `logs [service...]` — tails logs; supports `--follow`, `--since`, `--lines`.
-- `version` — prints CLI version.
+- Podman (with podman-compose)
+- Python (with uv)
+- [optional] NVIDIA GPU Drivers
+
+Then you setup your pods with the following:
+
+```bash
+# Verify environment, create volumes and pre-pull images
+uv run airpod.py init
+
+# Run the services
+uv run airpod.py start
+
+# Make sure everything is going well
+uv run airpod.py status
+
+# Stop everything when you're done
+uv run airpod.py status
+```
+
+Feel free to run `uv run airpod.py -h ` to see a full list of available commands.
+
+## Notes
 
 Images are referenced with fully-qualified registries: `docker.io/ollama/ollama:latest` and `ghcr.io/open-webui/open-webui:latest`.
 
-Security: `init` generates and persists an Open WebUI secret at `~/.config/aipod/webui_secret` (or `$XDG_CONFIG_HOME/aipod/webui_secret`) and injects it when starting the WebUI container.
+Security: `init` generates and persists an Open WebUI secret at `~/.config/airpod/webui_secret` (or `$XDG_CONFIG_HOME/airpod/webui_secret`) and injects it when starting the WebUI container.
 
 Open WebUI is configured to talk to Ollama via `http://host.containers.internal:11434` (host-published port).
 Networking: Open WebUI points at Ollama via `http://host.containers.internal:11434` (host-published port) to avoid cross-pod DNS issues.
 
-## Roadmap
-- Core commands: `init`, `start`, `stop`, `status`, `logs`.
-- Service definitions: Ollama pod (GGUF-ready) and Open WebUI pod linked to Ollama.
-- Future services: ComfyUI and more via modular pod definitions.
-- Config overrides: user config for ports, images, GPU toggle.
-- Tests: subprocess mocks for Podman wrappers and command flows.
+## License
+
+Check out [LICENSE](./LICENSE) for more details.
+

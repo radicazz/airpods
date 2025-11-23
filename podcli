@@ -1,7 +1,0 @@
-#!/usr/bin/env sh
-
-# Simple wrapper to run aipod through uv if available.
-if command -v uv >/dev/null 2>&1; then
-    exec uv run aipod.py "$@"
-fi
-exec python aipod.py "$@"

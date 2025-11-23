@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "aipod"
-version = "0.0.1"
+name = "airpod"
+version = "0.1.0"
 description = "Rich, user-friendly CLI for orchestrating local AI services with Podman and UV."
 readme = "README.md"
 requires-python = ">=3.10"
