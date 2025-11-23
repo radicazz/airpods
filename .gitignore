@@ -1,0 +1,27 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+.env
+
+# Tooling
+.python-version
+.ruff_cache/
+.mypy_cache/
+
+# Editors
+.DS_Store
+.vscode/
+.idea/
+
+# Builds / outputs
+dist/
+build/
+*.egg-info/
+
+# Podman / containers
+podman-machine-default*
