@@ -40,8 +40,9 @@ SERVICES: Dict[str, ServiceSpec] = {
         pod="aipod-open-webui",
         container="aipod-open-webui-0",
         image="ghcr.io/open-webui/open-webui:latest",
-        ports=[(3000, 3000)],
+        ports=[(3000, 8080)],
         env={
+            # Reach Ollama via the host-published port.
             "OLLAMA_BASE_URL": "http://host.containers.internal:11434",
         },
         volumes=[(OPENWEBUI_VOLUME, "/app/backend/data")],

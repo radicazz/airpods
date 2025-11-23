@@ -20,6 +20,7 @@ Provide a Rich + Typer-powered CLI (`aipod.py`) that orchestrates local AI servi
 - Volumes: `aipod_ollama_data` for models, `aipod_webui_data` for Open WebUI data.
 - Images: `docker.io/ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`; pulled during `init`/`start`.
 - Secrets: Open WebUI secret persisted at `~/.config/aipod/webui_secret` (or `$XDG_CONFIG_HOME/aipod/webui_secret`) during `init`, injected on start.
+- Networking: Open WebUI targets Ollama via host-published `http://host.containers.internal:11434`.
 - Secrets: Open WebUI `WEBUI_SECRET_KEY` generated and stored at `~/.config/aipod/webui_secret` (or `$XDG_CONFIG_HOME/aipod`).
 
 ## Testing Approach

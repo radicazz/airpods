@@ -28,6 +28,9 @@ Images are referenced with fully-qualified registries: `docker.io/ollama/ollama:
 
 Security: `init` generates and persists an Open WebUI secret at `~/.config/aipod/webui_secret` (or `$XDG_CONFIG_HOME/aipod/webui_secret`) and injects it when starting the WebUI container.
 
+Open WebUI is configured to talk to Ollama via `http://host.containers.internal:11434` (host-published port).
+Networking: Open WebUI points at Ollama via `http://host.containers.internal:11434` (host-published port) to avoid cross-pod DNS issues.
+
 ## Roadmap
 - Core commands: `init`, `start`, `stop`, `status`, `logs`.
 - Service definitions: Ollama pod (GGUF-ready) and Open WebUI pod linked to Ollama.
