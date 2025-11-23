@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sys
+import os
+import shutil
+from pathlib import Path
 from typing import List, Optional
 
 import typer
@@ -17,6 +20,25 @@ app = typer.Typer(
     help="Orchestrate local AI services (Ollama, Open WebUI) with Podman + UV.",
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+
+
+def _maybe_reexec_with_uv() -> None:
+    """Re-exec the command under `uv run` if available and not already active."""
+    if os.environ.get("AIPOD_NO_UV_REEXEC") == "1":
+        return
+    if os.environ.get("AIPOD_UV_BOOTSTRAPPED") == "1":
+        return
+    # uv sets UV_PROJECT_ENVIRONMENT when running via `uv run`
+    if os.environ.get("UV_PROJECT_ENVIRONMENT"):
+        return
+    uv_path = shutil.which("uv")
+    if not uv_path:
+        return
+    env = os.environ.copy()
+    env["AIPOD_UV_BOOTSTRAPPED"] = "1"
+    script = Path(__file__).resolve()
+    args = [uv_path, "run", sys.executable, str(script)] + sys.argv[1:]
+    os.execvpe(uv_path, args, env)
 
 
 def _resolve_services(names: Optional[List[str]]) -> List[ServiceSpec]:
@@ -193,6 +215,7 @@ def logs(
 
 
 def main() -> None:
+    _maybe_reexec_with_uv()
     try:
         app()
     except podman.PodmanError as exc:
