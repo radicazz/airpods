@@ -14,6 +14,14 @@ Rich, user-friendly CLI for orchestrating local AI services with Podman and UV. 
 3. `uv run aipod.py start` to launch Ollama + Open WebUI pods.
 4. `uv run aipod.py status` to view health and ports; `uv run aipod.py logs` to inspect.
 
+## Commands (current scaffold)
+- `init` — checks dependencies, ensures volumes, and pulls images.
+- `start [service...]` — starts pods (default both); GPU auto-detected unless `--cpu`.
+- `stop [service...]` — stops pods; `--remove` removes pods after stop.
+- `status [service...]` — reports pod status, ports, and container counts.
+- `logs [service...]` — tails logs; supports `--follow`, `--since`, `--lines`.
+- `version` — prints CLI version.
+
 ## Roadmap
 - Core commands: `init`, `start`, `stop`, `status`, `logs`.
 - Service definitions: Ollama pod (GGUF-ready) and Open WebUI pod linked to Ollama.

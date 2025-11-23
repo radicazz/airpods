@@ -12,8 +12,8 @@ Provide a Rich + Typer-powered CLI (`aipod.py`) that orchestrates local AI servi
 - Optional `doctor`: Re-run checks without creating resources.
 
 ## Architecture Notes
-- Modules: `aipod.py` (Typer entry + wiring), `aipod/podman.py` (subprocess wrapper), `aipod/system.py` (env checks, GPU detection), `aipod/pods.py` (service specs), `aipod/logging.py` (Rich console).
-- Pod specs include names, images, ports, env, volumes, and GPU requirements. Easy to extend mapping for new services.
+- Modules: `aipod.py` (Typer entry + wiring), `aipod/podman.py` (subprocess wrapper), `aipod/system.py` (env checks, GPU detection), `aipod/config.py` (service specs), `aipod/logging.py` (Rich console).
+- Pod specs include names, images, ports, env, volumes, and GPU requirements. Easy to extend mapping in `config.py` for new services.
 - Errors surfaced with clear remediation (install Podman, start podman machine, check GPU drivers).
 
 ## Data & Images
