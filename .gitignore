@@ -1,6 +1,10 @@
 # Private dev files
 private/
 
+# Local volumes/data (self-contained)
+volumes/
+config/
+
 # Uvicorn
 uv.lock
 

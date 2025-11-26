@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 from .logging import console
@@ -24,21 +24,14 @@ def _run(args: List[str], capture: bool = True, check: bool = True) -> subproces
     return proc
 
 
-def volume_exists(name: str) -> bool:
-    try:
-        _run(["volume", "inspect", name])
-        return True
-    except subprocess.CalledProcessError:
-        return False
-
-
-def ensure_volume(name: str) -> None:
-    if volume_exists(name):
+def ensure_directory(path: Path, mode: int = 0o755) -> None:
+    """Create a directory with proper permissions for bind mounts."""
+    if path.exists():
         return
     try:
-        _run(["volume", "create", name], capture=False)
-    except subprocess.CalledProcessError as exc:
-        raise PodmanError(f"failed to create volume {name}: {exc}") from exc
+        path.mkdir(parents=True, exist_ok=True, mode=mode)
+    except OSError as exc:
+        raise PodmanError(f"failed to create directory {path}: {exc}") from exc
 
 
 def pull_image(image: str) -> None:

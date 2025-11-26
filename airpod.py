@@ -10,7 +10,18 @@ from rich.table import Table
 
 from airpod import __version__
 from airpod import podman
-from airpod.config import SERVICES, ServiceSpec, get_service, list_service_names
+from airpod.config import (
+    SERVICES,
+    ServiceSpec,
+    get_service,
+    list_service_names,
+    PROJECT_ROOT,
+    VOLUMES_DIR,
+    DATA_OLLAMA,
+    DATA_OPENWEBUI,
+    DATA_SHARED,
+    CONFIG_DIR,
+)
 from airpod.logging import console, status_spinner
 from airpod import state
 from airpod.system import CheckResult, check_dependency, detect_gpu
@@ -60,7 +71,7 @@ def version() -> None:
 
 @app.command()
 def init() -> None:
-    """Verify tools, create volumes, and pre-pull images."""
+    """Verify tools, create local directories, and pre-pull images."""
     checks = [
         check_dependency("podman", ["--version"]),
         check_dependency("podman-compose", ["--version"]),
@@ -73,10 +84,12 @@ def init() -> None:
         console.print("[error]podman is required; install it and re-run init.[/]")
         raise typer.Exit(code=1)
 
-    with status_spinner("Ensuring volumes"):
-        for spec in SERVICES.values():
-            for volume, _ in spec.volumes:
-                podman.ensure_volume(volume)
+    with status_spinner("Creating local directories"):
+        # Create all volume directories (self-contained structure)
+        podman.ensure_directory(DATA_OLLAMA)
+        podman.ensure_directory(DATA_OPENWEBUI)
+        podman.ensure_directory(DATA_SHARED)
+        console.print(f"[info]Created: {VOLUMES_DIR}")
 
     with status_spinner("Pulling images"):
         for spec in SERVICES.values():
@@ -87,7 +100,7 @@ def init() -> None:
         secret = state.ensure_webui_secret()
     console.print(f"[info]Open WebUI secret stored at {state.config_dir() / 'webui_secret'}[/]")
 
-    console.print(Panel.fit("[ok]init complete. pods are ready to start.[/]", border_style="green"))
+    console.print(Panel.fit("[ok]init complete. All data is self-contained in this project.[/]", border_style="green"))
 
 
 @app.command()
@@ -101,10 +114,11 @@ def start(
     gpu_available, gpu_detail = detect_gpu()
     console.print(f"[info]GPU: {'enabled' if gpu_available else 'not detected'} ({gpu_detail})[/]")
 
-    with status_spinner("Ensuring volumes"):
-        for spec in specs:
-            for volume, _ in spec.volumes:
-                podman.ensure_volume(volume)
+    with status_spinner("Ensuring local directories"):
+        # Ensure directories exist (idempotent)
+        podman.ensure_directory(DATA_OLLAMA)
+        podman.ensure_directory(DATA_OPENWEBUI)
+        podman.ensure_directory(DATA_SHARED)
 
     with status_spinner("Pulling images"):
         for spec in specs:
@@ -235,6 +249,65 @@ def logs(
         code = podman.stream_logs(spec.container, follow=follow, tail=lines, since=since)
         if code != 0:
             console.print(f"[warn]podman logs exited with code {code} for {spec.container}[/]")
+
+
+@app.command()
+def path(
+    volumes: bool = typer.Option(False, "--volumes", help="Show volume paths only."),
+    config: bool = typer.Option(False, "--config", help="Show config path only."),
+) -> None:
+    """Show where project data and config are stored."""
+    import shutil
+    
+    def get_dir_size(path) -> str:
+        """Get human-readable directory size."""
+        if not path.exists():
+            return "n/a"
+        total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if total < 1024.0:
+                return f"{total:.1f} {unit}"
+            total /= 1024.0
+        return f"{total:.1f} PB"
+    
+    # If no specific flag, show all
+    show_all = not (volumes or config)
+    
+    if show_all or not config:
+        table = Table(title="Data Volumes (Self-Contained)", header_style="bold cyan")
+        table.add_column("Location")
+        table.add_column("Path")
+        table.add_column("Size")
+        table.add_column("Exists")
+        
+        if show_all:
+            table.add_row("Project Root", str(PROJECT_ROOT), "-", "✓")
+            table.add_row("Volumes", str(VOLUMES_DIR), get_dir_size(VOLUMES_DIR), "✓" if VOLUMES_DIR.exists() else "✗")
+        
+        table.add_row("  ├─ Ollama", str(DATA_OLLAMA), get_dir_size(DATA_OLLAMA), "✓" if DATA_OLLAMA.exists() else "✗")
+        table.add_row("  ├─ Open WebUI", str(DATA_OPENWEBUI), get_dir_size(DATA_OPENWEBUI), "✓" if DATA_OPENWEBUI.exists() else "✗")
+        table.add_row("  └─ Shared", str(DATA_SHARED), get_dir_size(DATA_SHARED), "✓" if DATA_SHARED.exists() else "✗")
+        
+        console.print(table)
+    
+    if show_all or config:
+        if show_all:
+            console.print()
+        
+        config_table = Table(title="Configuration", header_style="bold cyan")
+        config_table.add_column("Location")
+        config_table.add_column("Path")
+        config_table.add_column("Exists")
+        
+        config_table.add_row("Config Directory", str(CONFIG_DIR), "✓" if CONFIG_DIR.exists() else "✗")
+        secret_file = CONFIG_DIR / "webui_secret"
+        config_table.add_row("  └─ WebUI Secret", str(secret_file), "✓" if secret_file.exists() else "✗")
+        
+        console.print(config_table)
+    
+    if show_all:
+        console.print()
+        console.print("[info]💡 Tip: To backup everything, just copy the entire project folder![/]")
 
 
 def main() -> None:

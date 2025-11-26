@@ -17,11 +17,15 @@ Provide a Rich + Typer-powered CLI (`airpod.py`) that orchestrates local AI serv
 - Errors surfaced with clear remediation (install Podman, start podman machine, check GPU drivers).
 
 ## Data & Images
-- Volumes: `airpod_ollama_data` for models, `airpod_webui_data` for Open WebUI data.
-- Images: `docker.io/ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`; pulled during `init`/`start`.
-- Secrets: Open WebUI secret persisted at `~/.config/airpod/webui_secret` (or `$XDG_CONFIG_HOME/airpod/webui_secret`) during `init`, injected on start.
-- Networking: Open WebUI targets Ollama via host-published `http://host.containers.internal:11434`.
-- Secrets: Open WebUI `WEBUI_SECRET_KEY` generated and stored at `~/.config/airpod/webui_secret` (or `$XDG_CONFIG_HOME/airpod`).
+- **Self-Contained Storage**: All data lives in local directories within the project folder for portability:
+  - `./volumes/data-ollama/` → Ollama models and data (bind mount to `/root/.ollama`)
+  - `./volumes/data-open-webui/` → Open WebUI database and uploads (bind mount to `/app/backend/data`)
+  - `./volumes/shared/` → Reserved for future shared storage needs
+  - `./config/webui_secret` → Open WebUI session secret (local to project)
+- **No Named Volumes**: Using bind mounts instead of Podman named volumes for transparency and portability
+- Images: `docker.io/ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`; pulled during `init`/`start`
+- Networking: Open WebUI targets Ollama via host-published `http://host.containers.internal:11434`
+- Permissions: Directories created with 0755; Podman rootless mode handles UID mapping automatically
 
 ## Testing Approach
 - Unit tests mock subprocess interactions to validate command flow and flags.

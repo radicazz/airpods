@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import os
 import secrets
 from pathlib import Path
 
 
 def config_dir() -> Path:
-    base = os.environ.get("XDG_CONFIG_HOME")
-    if base:
-        return Path(base) / "airpod"
-    return Path.home() / ".config" / "airpod"
+    """Return the local project config directory (self-contained)."""
+    from airpod.config import CONFIG_DIR
+    return CONFIG_DIR
 
 
 def ensure_config_dir() -> Path:

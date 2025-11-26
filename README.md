@@ -4,6 +4,7 @@ Rich, user-friendly CLI for orchestrating local AI services with Podman and Pyth
 
 ## Features
 
+- **Self-contained & Portable**: All data (models, chats, config) lives in the project folder. Move the folder, move everything.
 - One-command setup and start: `uv run airpod.py init` and `uv run airpod.py start`.
 - GPU-aware: detect NVIDIA GPUs and attach to pods when available; gracefully fall back to CPU.
 - Opinionated but extensible: defaults for ports/volumes/images, easy to extend with future services like ComfyUI.
@@ -30,21 +31,33 @@ uv run airpod.py start
 uv run airpod.py status
 
 # Stop everything when you're done
-uv run airpod.py status
+uv run airpod.py stop
 ```
 
-Feel free to run `uv run airpod.py -h ` to see a full list of available commands.
+Feel free to run `uv run airpod.py -h` to see a full list of available commands.
+
+## Service Data
+
+**Everything is self-contained!** All data lives in local directories within the project:
+
+```
+airpod/
+├── volumes/              # All service data (gitignored)
+│   ├── data-ollama/      # Ollama models and data
+│   ├── data-open-webui/  # Open WebUI database and uploads
+│   └── shared/           # Shared storage (for future services)
+└── config/               # Configuration files (gitignored)
+    └── webui_secret      # Open WebUI session secret
+```
 
 ## Notes
 
 Images are referenced with fully-qualified registries: `docker.io/ollama/ollama:latest` and `ghcr.io/open-webui/open-webui:latest`.
 
-Security: `init` generates and persists an Open WebUI secret at `~/.config/airpod/webui_secret` (or `$XDG_CONFIG_HOME/airpod/webui_secret`) and injects it when starting the WebUI container.
+**Security**: `init` generates and persists an Open WebUI secret at `./config/webui_secret` (local to the project) and injects it when starting the WebUI container.
 
-Open WebUI is configured to talk to Ollama via `http://host.containers.internal:11434` (host-published port).
-Networking: Open WebUI points at Ollama via `http://host.containers.internal:11434` (host-published port) to avoid cross-pod DNS issues.
+**Networking**: Open WebUI points at Ollama via `http://host.containers.internal:11434` (host-published port) to avoid cross-pod DNS issues.
 
 ## License
 
 Check out [LICENSE](./LICENSE) for more details.
-

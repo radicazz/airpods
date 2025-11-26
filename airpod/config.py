@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
@@ -12,13 +13,22 @@ class ServiceSpec:
     image: str
     ports: List[Tuple[int, int]] = field(default_factory=list)
     env: Dict[str, str] = field(default_factory=dict)
-    volumes: List[Tuple[str, str]] = field(default_factory=list)  # host volume name -> container path
+    volumes: List[Tuple[str, str]] = field(default_factory=list)  # host path -> container path
     needs_gpu: bool = False
     health_path: Optional[str] = None
 
 
-OLLAMA_VOLUME = "airpod_ollama_data"
-OPENWEBUI_VOLUME = "airpod_webui_data"
+# Project structure - all data is local and portable
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+VOLUMES_DIR = PROJECT_ROOT / "volumes"
+DATA_OLLAMA = VOLUMES_DIR / "data-ollama"
+DATA_OPENWEBUI = VOLUMES_DIR / "data-open-webui"
+DATA_SHARED = VOLUMES_DIR / "shared"
+CONFIG_DIR = PROJECT_ROOT / "config"
+
+# Volume paths (absolute paths for bind mounts)
+OLLAMA_VOLUME = str(DATA_OLLAMA)
+OPENWEBUI_VOLUME = str(DATA_OPENWEBUI)
 
 SERVICES: Dict[str, ServiceSpec] = {
     "ollama": ServiceSpec(
