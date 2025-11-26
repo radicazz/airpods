@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import http.client
 from typing import List, Optional
@@ -7,8 +8,8 @@ from typing import List, Optional
 import typer
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
-from airpod import __version__
 from airpod import podman
 from airpod.config import (
     SERVICES,
@@ -29,7 +30,25 @@ from airpod.system import CheckResult, check_dependency, detect_gpu
 app = typer.Typer(
     help="Orchestrate local AI services (Ollama, Open WebUI) with Podman + UV.",
     context_settings={"help_option_names": ["-h", "--help"]},
+    rich_markup_mode="rich",
 )
+
+
+def _print_banner() -> None:
+    """Print ASCII art banner unless AIRPOD_NO_BANNER is set."""
+    if os.environ.get("AIRPOD_NO_BANNER"):
+        return
+    
+    banner = Text()
+    banner.append("    _    ___ ____  ____   ___  ____ \n", style="bold cyan")
+    banner.append("   / \\  |_ _|  _ \\|  _ \\ / _ \\|  _ \\\n", style="bold cyan")
+    banner.append("  / _ \\  | || |_) | |_) | | | | | | |\n", style="bold cyan")
+    banner.append(" / ___ \\ | ||  _ <|  __/| |_| | |_| |\n", style="bold cyan")
+    banner.append("/_/   \\_\\___|_| \\_\\_|    \\___/|____/ \n", style="bold cyan")
+    banner.append("\n Local AI Orchestration with Podman", style="dim")
+    
+    console.print(banner)
+    console.print()
 
 
 def _resolve_services(names: Optional[List[str]]) -> List[ServiceSpec]:
@@ -66,12 +85,15 @@ def _ensure_podman_available() -> None:
 @app.command()
 def version() -> None:
     """Show CLI version."""
+    from airpod import __version__
     console.print(f"airpod {__version__}")
 
 
 @app.command()
 def init() -> None:
     """Verify tools, create local directories, and pre-pull images."""
+    _print_banner()
+    
     checks = [
         check_dependency("podman", ["--version"]),
         check_dependency("podman-compose", ["--version"]),
@@ -108,7 +130,9 @@ def start(
     service: Optional[List[str]] = typer.Argument(None, help="Services to start (default: all)."),
     force_cpu: bool = typer.Option(False, "--cpu", help="Force CPU even if GPU is present."),
 ) -> None:
-    """Start pods for specified services (default: ollama + open-webui)."""
+    """Start pods for specified services. [dim](alias: up)[/dim]"""
+    _print_banner()
+    
     specs = _resolve_services(service)
     _ensure_podman_available()
     gpu_available, gpu_detail = detect_gpu()
@@ -140,7 +164,19 @@ def start(
                 volumes=spec.volumes,
                 gpu=use_gpu,
             )
-        console.print(f"[ok]{spec.name} running in pod {spec.pod}[/]")
+    
+    # Print success panel with service URLs
+    console.print()
+    success_lines = ["[bold green]Services Started Successfully[/bold green]", ""]
+    for spec in specs:
+        if spec.ports:
+            host_port = spec.ports[0][0]
+            success_lines.append(f"[cyan]●[/cyan] {spec.name}")
+            success_lines.append(f"  [dim]http://localhost:{host_port}[/dim]")
+            success_lines.append("")
+    success_lines.append("[dim]Run 'airpod status' to check health[/dim]")
+    
+    console.print(Panel("\n".join(success_lines), border_style="green", padding=(1, 2)))
 
 
 @app.command()
@@ -149,7 +185,7 @@ def stop(
     remove: bool = typer.Option(False, "--remove", "-r", help="Remove pods after stopping."),
     timeout: int = typer.Option(10, "--timeout", "-t", help="Stop timeout seconds."),
 ) -> None:
-    """Stop pods for specified services."""
+    """Stop pods for specified services. [dim](alias: down)[/dim]"""
     specs = _resolve_services(service)
     for spec in specs:
         if not podman.pod_exists(spec.pod):
@@ -165,7 +201,7 @@ def stop(
 
 @app.command()
 def status(service: Optional[List[str]] = typer.Argument(None, help="Services to report (default: all).")) -> None:
-    """Show pod status."""
+    """Show pod status. [dim](alias: ps)[/dim]"""
     specs = _resolve_services(service)
     pod_rows = {row.get("Name"): row for row in podman.pod_status()}
 
@@ -308,6 +344,29 @@ def path(
     if show_all:
         console.print()
         console.print("[info]💡 Tip: To backup everything, just copy the entire project folder![/]")
+
+
+# Command aliases (hidden from help, shown inline with main commands)
+@app.command(name="up", hidden=True)
+def up(
+    service: Optional[List[str]] = typer.Argument(None, help="Services to start (default: all)."),
+    force_cpu: bool = typer.Option(False, "--cpu", help="Force CPU even if GPU is present."),
+) -> None:
+    start(service, force_cpu)
+
+
+@app.command(name="down", hidden=True)
+def down(
+    service: Optional[List[str]] = typer.Argument(None, help="Services to stop (default: all)."),
+    remove: bool = typer.Option(False, "--remove", "-r", help="Remove pods after stopping."),
+    timeout: int = typer.Option(10, "--timeout", "-t", help="Stop timeout seconds."),
+) -> None:
+    stop(service, remove, timeout)
+
+
+@app.command(name="ps", hidden=True)
+def ps(service: Optional[List[str]] = typer.Argument(None, help="Services to report (default: all).")) -> None:
+    status(service)
 
 
 def main() -> None:

@@ -14,5 +14,8 @@ dependencies = [
   "click>=8.1,<8.2",
 ]
 
+[project.scripts]
+airpod = "airpod:main"
+
 [tool.hatch.metadata]
 allow-direct-references = true
