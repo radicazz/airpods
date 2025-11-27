@@ -12,6 +12,7 @@ dependencies = [
   "typer>=0.9,<0.13",
   "rich>=13.0,<14.0",
   "click>=8.1,<8.2",
+  "psutil>=5.9,<6.0",
 ]
 
 [project.scripts]

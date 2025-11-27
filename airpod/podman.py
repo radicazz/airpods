@@ -64,7 +64,7 @@ def ensure_pod(pod: str, ports: Iterable[tuple[int, int]]) -> None:
     for host, container in ports:
         args.extend(["-p", f"{host}:{container}"])
     try:
-        _run(args, capture=False)
+        _run(args, capture=True)
     except subprocess.CalledProcessError as exc:
         raise PodmanError(f"failed to create pod {pod}: {exc}") from exc
 
@@ -97,7 +97,7 @@ def run_container(
         args.extend(["--device", "nvidia.com/gpu=all"])
     args.append(image)
     try:
-        _run(args, capture=False)
+        _run(args, capture=True)
     except subprocess.CalledProcessError as exc:
         raise PodmanError(f"failed to start container {name}: {exc}") from exc
 
@@ -125,14 +125,14 @@ def pod_inspect(name: str) -> Optional[Dict]:
 
 def stop_pod(name: str, timeout: int = 10) -> None:
     try:
-        _run(["pod", "stop", "--ignore", f"--time={timeout}", name], capture=False)
+        _run(["pod", "stop", "--ignore", f"--time={timeout}", name], capture=True)
     except subprocess.CalledProcessError as exc:
         raise PodmanError(f"failed to stop pod {name}: {exc}") from exc
 
 
 def remove_pod(name: str) -> None:
     try:
-        _run(["pod", "rm", "--force", "--ignore", name], capture=False)
+        _run(["pod", "rm", "--force", "--ignore", name], capture=True)
     except subprocess.CalledProcessError as exc:
         raise PodmanError(f"failed to remove pod {name}: {exc}") from exc
 

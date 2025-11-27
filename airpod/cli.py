@@ -21,11 +21,14 @@ from airpod.config import (
     DATA_OLLAMA,
     DATA_OPENWEBUI,
     DATA_SHARED,
+    DATA_CADDY,
     CONFIG_DIR,
+    ensure_caddyfile,
+    generate_self_signed_cert,
 )
 from airpod.logging import console, status_spinner
 from airpod import state
-from airpod.system import CheckResult, check_dependency, detect_gpu
+from airpod.system import CheckResult, check_dependency, detect_gpu, get_resource_stats
 
 app = typer.Typer(
     help="Orchestrate local AI services (Ollama, Open WebUI) with Podman + UV.",
@@ -111,7 +114,16 @@ def init() -> None:
         podman.ensure_directory(DATA_OLLAMA)
         podman.ensure_directory(DATA_OPENWEBUI)
         podman.ensure_directory(DATA_SHARED)
+        podman.ensure_directory(DATA_CADDY)
         console.print(f"[info]Created: {VOLUMES_DIR}")
+    
+    with status_spinner("Generating Caddy configuration"):
+        ensure_caddyfile()
+        console.print(f"[info]Caddyfile ready at {CONFIG_DIR / 'Caddyfile'}")
+    
+    with status_spinner("Generating self-signed HTTPS certificate"):
+        generate_self_signed_cert()
+        console.print(f"[info]Certificate created at {CONFIG_DIR / 'certs' / 'localhost.crt'}")
 
     with status_spinner("Pulling images"):
         for spec in SERVICES.values():
@@ -143,12 +155,37 @@ def start(
         podman.ensure_directory(DATA_OLLAMA)
         podman.ensure_directory(DATA_OPENWEBUI)
         podman.ensure_directory(DATA_SHARED)
+        podman.ensure_directory(DATA_CADDY)
+    
+    with status_spinner("Ensuring Caddy configuration"):
+        ensure_caddyfile()
+        generate_self_signed_cert()
 
     with status_spinner("Pulling images"):
         for spec in specs:
             podman.pull_image(spec.image)
 
+    # Start infrastructure services first (Caddy)
+    caddy_spec = get_service("caddy")
+    if caddy_spec and caddy_spec in specs:
+        with status_spinner(f"Creating pod {caddy_spec.pod}"):
+            podman.ensure_pod(caddy_spec.pod, caddy_spec.ports)
+        with status_spinner(f"Starting {caddy_spec.name} (gateway)"):
+            podman.run_container(
+                pod=caddy_spec.pod,
+                name=caddy_spec.container,
+                image=caddy_spec.image,
+                env=caddy_spec.env,
+                volumes=caddy_spec.volumes,
+                gpu=False,
+            )
+        console.print("[info]🔒 Proxy enabled - all services accessible via HTTPS[/]")
+
+    # Start application services
     for spec in specs:
+        if spec.is_infrastructure:
+            continue  # Already started
+        
         with status_spinner(f"Creating pod {spec.pod}"):
             podman.ensure_pod(spec.pod, spec.ports)
         with status_spinner(f"Starting {spec.name}"):
@@ -168,12 +205,22 @@ def start(
     # Print success panel with service URLs
     console.print()
     success_lines = ["[bold green]Services Started Successfully[/bold green]", ""]
+    
+    # Show proxy URL if Caddy is running
+    if caddy_spec and caddy_spec in specs:
+        success_lines.append("[cyan]●[/cyan] Gateway (HTTPS)")
+        success_lines.append("  [bold]https://localhost:8443[/bold]")
+        success_lines.append("")
+    
     for spec in specs:
+        if spec.is_infrastructure:
+            continue  # Already shown
+        success_lines.append(f"[cyan]●[/cyan] {spec.name}")
         if spec.ports:
             host_port = spec.ports[0][0]
-            success_lines.append(f"[cyan]●[/cyan] {spec.name}")
-            success_lines.append(f"  [dim]http://localhost:{host_port}[/dim]")
-            success_lines.append("")
+            success_lines.append(f"  [dim]Internal: :{host_port}[/dim]")
+        success_lines.append("")
+    
     success_lines.append("[dim]Run 'airpod status' to check health[/dim]")
     
     console.print(Panel("\n".join(success_lines), border_style="green", padding=(1, 2)))
@@ -205,31 +252,76 @@ def status(service: Optional[List[str]] = typer.Argument(None, help="Services to
     specs = _resolve_services(service)
     pod_rows = {row.get("Name"): row for row in podman.pod_status()}
 
-    table = Table(title="Pods", header_style="bold cyan")
+    # System resources table
+    stats = get_resource_stats()
+    res_table = Table(title="System Resources", header_style="bold cyan", show_header=True)
+    res_table.add_column("Resource")
+    res_table.add_column("Usage")
+    res_table.add_column("Details")
+    
+    # CPU
+    cpu_usage = f"{stats.cpu_percent:.1f}%"
+    cpu_details = f"{stats.cpu_count} cores"
+    res_table.add_row("CPU", cpu_usage, cpu_details)
+    
+    # RAM
+    ram_usage = f"{stats.ram_percent:.1f}%"
+    ram_details = f"{stats.ram_used_gb:.1f} GB / {stats.ram_total_gb:.1f} GB"
+    res_table.add_row("RAM", ram_usage, ram_details)
+    
+    # GPU
+    if stats.gpu_name:
+        gpu_usage = f"{stats.gpu_percent:.1f}%" if stats.gpu_percent else "n/a"
+        gpu_details = f"{stats.gpu_name} - {stats.gpu_used_mb} MB / {stats.gpu_total_mb} MB" if stats.gpu_used_mb else stats.gpu_name
+        res_table.add_row("GPU", gpu_usage, gpu_details)
+    else:
+        res_table.add_row("GPU", "[dim]not detected[/dim]", "-")
+    
+    # Proxy status
+    caddy_spec = get_service("caddy")
+    if caddy_spec:
+        caddy_row = pod_rows.get(caddy_spec.pod)
+        if caddy_row and caddy_row.get("Status") == "Running":
+            proxy_url = "https://localhost:8443"
+            proxy_ping = _ping_service(caddy_spec, 8443)
+            proxy_status = "[ok]✓ online[/ok]" if proxy_ping == "[ok]ok" else f"[warn]⚠ {proxy_ping}[/warn]"
+            res_table.add_row("Proxy", proxy_status, proxy_url)
+        else:
+            res_table.add_row("Proxy", "[warn]✗ offline[/warn]", "https://localhost:8443")
+    
+    console.print(res_table)
+    console.print()
+
+    # Services table
+    table = Table(title="Services", header_style="bold cyan")
     table.add_column("Service")
-    table.add_column("Pod")
     table.add_column("Status")
-    table.add_column("Ports")
-    table.add_column("Containers")
-    table.add_column("Ping")
+    table.add_column("Endpoint")
+    table.add_column("Health")
 
     for spec in specs:
         row = pod_rows.get(spec.pod)
         if not row:
-            table.add_row(spec.name, spec.pod, "[warn]absent", "-", "-", "-")
+            table.add_row(spec.name, "[warn]absent", "-", "-")
             continue
-        inspect_info = podman.pod_inspect(spec.pod) or {}
-        port_bindings = inspect_info.get("InfraConfig", {}).get("PortBindings", {}) if inspect_info else {}
-        ports = []
-        for container_port, bindings in port_bindings.items():
-            for binding in bindings or []:
-                host_port = binding.get("HostPort", "")
-                ports.append(f"{host_port}->{container_port}")
-        ports_display = ", ".join(ports) if ports else (", ".join(row.get("Ports", [])) if row.get("Ports") else "-")
-        containers = str(len(inspect_info.get("Containers", []))) if inspect_info else str(row.get("NumberOfContainers", "?") or "?")
-        host_port = _extract_host_port(spec, port_bindings)
-        ping_status = _ping_service(spec, host_port) if host_port else "-"
-        table.add_row(spec.name, spec.pod, row.get("Status", "?"), ports_display, containers, ping_status)
+        
+        status_val = row.get("Status", "?")
+        status_display = "[ok]running" if status_val == "Running" else f"[warn]{status_val.lower()}"
+        
+        # Endpoint display
+        if spec.is_infrastructure:
+            endpoint = "Gateway :443"
+        elif spec.ports:
+            host_port = spec.ports[0][0]
+            endpoint = f"Internal :{host_port}"
+        else:
+            endpoint = "-"
+        
+        # Health check
+        host_port = _extract_host_port(spec, podman.pod_inspect(spec.pod).get("InfraConfig", {}).get("PortBindings", {}) if podman.pod_inspect(spec.pod) else {})
+        health = _ping_service(spec, host_port) if host_port else "-"
+        
+        table.add_row(spec.name, status_display, endpoint, health)
 
     console.print(table)
 
