@@ -1,7 +1,7 @@
 # Agents & Plan
 
 ## Intent
-Provide a Rich + Typer-powered CLI (`airpod.py`) that orchestrates local AI services via Podman. Initial services: Ollama (GGUF-capable) and Open WebUI wired to Ollama. Future additions: ComfyUI and others.
+Provide a Rich + Typer-powered CLI (`airpod/cli.py`, installed as the `airpod` command via uv tools) that orchestrates local AI services via Podman. Initial services: Ollama (GGUF-capable) and Open WebUI wired to Ollama. Future additions: ComfyUI and others.
 
 ## Command Surface (planned)
 - `init`: Verify dependencies (podman, podman-compose, uv, optional nvidia-smi), create volumes, pull images, summarize readiness.
@@ -12,7 +12,7 @@ Provide a Rich + Typer-powered CLI (`airpod.py`) that orchestrates local AI serv
 - Optional `doctor`: Re-run checks without creating resources.
 
 ## Architecture Notes
-- Modules: `airpod.py` (Typer entry + wiring), `airpod/podman.py` (subprocess wrapper), `airpod/system.py` (env checks, GPU detection), `airpod/config.py` (service specs), `airpod/logging.py` (Rich console), `podcli` (uv/python wrapper script).
+- Modules: `airpod/cli.py` (Typer entry + wiring), `airpod/podman.py` (subprocess wrapper), `airpod/system.py` (env checks, GPU detection), `airpod/config.py` (service specs), `airpod/logging.py` (Rich console), `podcli` (uv/python wrapper script).
 - Pod specs include names, images, ports, env, volumes, and GPU requirements. Easy to extend mapping in `config.py` for new services.
 - Errors surfaced with clear remediation (install Podman, start podman machine, check GPU drivers).
 
