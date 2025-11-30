@@ -1,0 +1,45 @@
+# Caddy configuration for airpod services
+# Auto-generated - do not edit directly
+
+{
+	# Disable automatic HTTPS redirects to avoid port conflicts
+	auto_https disable_redirects
+}
+
+# Main HTTPS endpoint on unprivileged port
+:8443 {
+	# Use self-signed certificate for local development
+	tls /etc/caddy/certs/localhost.crt /etc/caddy/certs/localhost.key
+
+	# Route root to Open WebUI
+	reverse_proxy host.containers.internal:3000
+}
+
+# ComfyUI HTTPS endpoint with session-based authentication
+:8444 {
+	# Use self-signed certificate for local development
+	tls /etc/caddy/certs/localhost.crt /etc/caddy/certs/localhost.key
+
+	# Forward authentication to Open WebUI session validation
+	# This validates the session cookie before allowing access to ComfyUI
+	@authenticated {
+		# Check if user has valid Open WebUI session
+		# Open WebUI uses session cookies that we can validate
+		header Cookie *
+	}
+
+	# For now, forward all requests to ComfyUI
+	# TODO: Implement proper session validation endpoint in Open WebUI
+	# forward_auth host.containers.internal:3000/api/v1/auths/verify
+	
+	reverse_proxy host.containers.internal:8188 {
+		# WebSocket support for ComfyUI real-time updates
+		header_up Upgrade {http.request.header.Upgrade}
+		header_up Connection {http.request.header.Connection}
+	}
+}
+
+# HTTP -> HTTPS redirect on unprivileged port
+http://:8080 {
+	redir https://{host}:8443{uri} permanent
+}

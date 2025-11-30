@@ -1,0 +1,53 @@
+# Caddy configuration for airpod services with portal
+# Path-based routing for unified access
+
+{
+	# Disable automatic HTTPS redirects to avoid port conflicts
+	auto_https disable_redirects
+}
+
+# Main HTTPS endpoint with path-based routing
+:8443 {
+	# Use self-signed certificate for local development
+	tls /etc/caddy/certs/localhost.crt /etc/caddy/certs/localhost.key
+
+	# Open WebUI at /chat (needs to come before generic /api and /static routes)
+	handle /chat* {
+		uri strip_prefix /chat
+		reverse_proxy host.containers.internal:3000
+	}
+
+	# ComfyUI at /comfy with WebSocket support
+	handle_path /comfy* {
+		reverse_proxy host.containers.internal:8188 {
+			# WebSocket support for ComfyUI real-time updates
+			header_up Upgrade {http.request.header.Upgrade}
+			header_up Connection {http.request.header.Connection}
+		}
+	}
+
+	# Portal static assets
+	handle /static* {
+		reverse_proxy host.containers.internal:8000
+	}
+
+	# Portal API endpoints
+	handle /api* {
+		reverse_proxy host.containers.internal:8000
+	}
+	
+	# Health check
+	handle /health {
+		reverse_proxy host.containers.internal:8000
+	}
+
+	# Portal landing page at root (catch-all, must be last)
+	handle {
+		reverse_proxy host.containers.internal:8000
+	}
+}
+
+# HTTP -> HTTPS redirect on unprivileged port
+http://:8080 {
+	redir https://{host}:8443{uri} permanent
+}

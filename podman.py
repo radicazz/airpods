@@ -109,6 +109,7 @@ def run_container(
     gpu: bool = False,
     command: Optional[List[str]] = None,
     userns_keep_id: bool = False,
+    volume_opts: Optional[str] = None,
 ) -> None:
     args: List[str] = [
         "run",
@@ -126,7 +127,10 @@ def run_container(
     for key, val in env.items():
         args.extend(["-e", f"{key}={val}"])
     for volume_name, dest in volumes:
-        args.extend(["-v", f"{volume_name}:{dest}"])
+        if volume_opts:
+            args.extend(["-v", f"{volume_name}:{dest}:{volume_opts}"])
+        else:
+            args.extend(["-v", f"{volume_name}:{dest}"])
     if gpu:
         args.extend(["--device", "nvidia.com/gpu=all"])
     args.append(image)

@@ -14,6 +14,13 @@ class CheckResult:
 
 
 @dataclass
+class CudaCapability:
+    major: int
+    minor: int
+    raw: str  # e.g., "6.1"
+
+
+@dataclass
 class ResourceStats:
     cpu_percent: float
     cpu_count: int
@@ -24,6 +31,7 @@ class ResourceStats:
     gpu_used_mb: Optional[int]
     gpu_total_mb: Optional[int]
     gpu_percent: Optional[float]
+    cuda_capability: Optional[str] = None
 
 
 def _run_command(args: List[str]) -> Tuple[bool, str]:
@@ -61,6 +69,45 @@ def detect_gpu() -> Tuple[bool, str]:
     if not gpu_names:
         return False, "no GPUs detected"
     return True, ", ".join(gpu_names)
+
+
+def detect_cuda_capability() -> Tuple[bool, Optional[CudaCapability], str]:
+    """Detect CUDA compute capability via nvidia-smi; fail softly.
+    
+    Returns:
+        (success, CudaCapability|None, detail_message)
+    """
+    if shutil.which("nvidia-smi") is None:
+        return False, None, "nvidia-smi not found"
+    
+    ok, output = _run_command([
+        "nvidia-smi",
+        "--query-gpu=compute_cap",
+        "--format=csv,noheader"
+    ])
+    
+    if not ok:
+        return False, None, "nvidia-smi failed"
+    
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        return False, None, "no compute capability detected"
+    
+    # Take first GPU's capability
+    raw_cap = lines[0]
+    
+    try:
+        parts = raw_cap.split(".")
+        if len(parts) != 2:
+            return False, None, f"unexpected format: {raw_cap}"
+        
+        major = int(parts[0])
+        minor = int(parts[1])
+        
+        capability = CudaCapability(major=major, minor=minor, raw=raw_cap)
+        return True, capability, raw_cap
+    except (ValueError, IndexError) as exc:
+        return False, None, f"parse error: {exc}"
 
 
 def get_gpu_stats() -> Tuple[Optional[str], Optional[int], Optional[int], Optional[float]]:
@@ -113,6 +160,7 @@ def get_resource_stats() -> ResourceStats:
             gpu_used_mb=None,
             gpu_total_mb=None,
             gpu_percent=None,
+            cuda_capability=None,
         )
     
     # CPU stats
@@ -128,6 +176,10 @@ def get_resource_stats() -> ResourceStats:
     # GPU stats
     gpu_name, gpu_used_mb, gpu_total_mb, gpu_percent = get_gpu_stats()
     
+    # CUDA capability
+    cuda_ok, cuda_cap, _ = detect_cuda_capability()
+    cuda_capability_str = cuda_cap.raw if cuda_ok and cuda_cap else None
+    
     return ResourceStats(
         cpu_percent=cpu_percent,
         cpu_count=cpu_count,
@@ -138,4 +190,5 @@ def get_resource_stats() -> ResourceStats:
         gpu_used_mb=gpu_used_mb,
         gpu_total_mb=gpu_total_mb,
         gpu_percent=gpu_percent,
+        cuda_capability=cuda_capability_str,
     )

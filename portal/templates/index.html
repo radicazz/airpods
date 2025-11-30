@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{ title }}</h1>
+            <p class="subtitle">Select a service to access</p>
+        </header>
+        
+        <main class="services-grid">
+            {% for service in services %}
+            {% if service.enabled %}
+            <a href="{{ service.path }}" class="service-card">
+                <div class="service-icon">{{ service.icon }}</div>
+                <h2>{{ service.display_name }}</h2>
+                <p>{{ service.description }}</p>
+            </a>
+            {% endif %}
+            {% endfor %}
+        </main>
+        
+        <footer>
+            <p>Powered by <strong>Airpod</strong></p>
+        </footer>
+    </div>
+</body>
+</html>

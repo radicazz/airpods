@@ -3,7 +3,15 @@ private/
 
 # Local volumes/data (self-contained)
 volumes/
-config/
+config/webui_secret
+config/Caddyfile
+config/certs/
+config/tunnel.json
+config/portal.json
+config/cloudflared.yml
+
+# Portal cache
+portal/__pycache__/
 
 # Uvicorn
 uv.lock
