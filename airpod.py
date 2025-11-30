@@ -69,8 +69,11 @@ def init() -> None:
     gpu_available, gpu_detail = detect_gpu()
     _print_checks(checks, gpu_available, gpu_detail)
 
-    if not checks[0].ok:
-        console.print("[error]podman is required; install it and re-run init.[/]")
+    missing = [check.name for check in checks if not check.ok]
+    if missing:
+        console.print(
+            f"[error]The following dependencies are required: {', '.join(missing)}. Install them and re-run init.[/]"
+        )
         raise typer.Exit(code=1)
 
     with status_spinner("Ensuring volumes"):
@@ -137,6 +140,7 @@ def stop(
 ) -> None:
     """Stop pods for specified services."""
     specs = _resolve_services(service)
+    _ensure_podman_available()
     for spec in specs:
         if not podman.pod_exists(spec.pod):
             console.print(f"[warn]{spec.pod} not found; skipping[/]")
@@ -153,6 +157,7 @@ def stop(
 def status(service: Optional[List[str]] = typer.Argument(None, help="Services to report (default: all).")) -> None:
     """Show pod status."""
     specs = _resolve_services(service)
+    _ensure_podman_available()
     pod_rows = {row.get("Name"): row for row in podman.pod_status()}
 
     table = Table(title="Pods", header_style="bold cyan")
@@ -225,6 +230,7 @@ def logs(
 ) -> None:
     """Show pod logs."""
     specs = _resolve_services(service)
+    _ensure_podman_available()
     if follow and len(specs) > 1:
         console.print("[warn]follow with multiple services will stream sequentially; Ctrl+C to stop.[/]")
 

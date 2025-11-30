@@ -30,7 +30,7 @@ uv run airpod.py start
 uv run airpod.py status
 
 # Stop everything when you're done
-uv run airpod.py status
+uv run airpod.py stop
 ```
 
 Feel free to run `uv run airpod.py -h ` to see a full list of available commands.
@@ -47,4 +47,3 @@ Networking: Open WebUI points at Ollama via `http://host.containers.internal:114
 ## License
 
 Check out [LICENSE](./LICENSE) for more details.
-
