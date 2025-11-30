@@ -3,6 +3,7 @@ private/
 
 # Local volumes/data (self-contained)
 volumes/
+configs/
 config/webui_secret
 config/Caddyfile
 config/certs/
