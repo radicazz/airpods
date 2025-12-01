@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from typing import Mapping
+
 from rich.panel import Panel
 from rich.table import Table
 
@@ -31,3 +34,19 @@ def info_panel(message: str) -> None:
     """Display an info message in a cyan panel."""
     console.print(Panel.fit(f"[info]{message}[/]", border_style="cyan"))
 
+
+def show_command_aliases(aliases: Mapping[str, str]) -> None:
+    """Render command aliases aligned to the right of each command."""
+    if not aliases:
+        return
+    grouped = defaultdict(list)
+    for alias, command in aliases.items():
+        grouped[command].append(alias)
+
+    table = Table(title="Command aliases", header_style="bold magenta")
+    table.add_column("Command", style="info")
+    table.add_column("Alias", style="alias")
+    for command in sorted(grouped):
+        alias_text = ", ".join(f"[alias]{alias}[/]" for alias in sorted(grouped[command]))
+        table.add_row(command, alias_text)
+    console.print(table)

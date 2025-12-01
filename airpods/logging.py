@@ -10,6 +10,7 @@ _theme = Theme(
         "warn": "yellow",
         "error": "bold red",
         "info": "cyan",
+        "alias": "magenta",
     }
 )
 

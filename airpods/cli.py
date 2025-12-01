@@ -4,24 +4,161 @@ import sys
 import http.client
 from typing import List, Optional
 
+import click
 import typer
 from rich.table import Table
 
 from airpods import __version__
-from airpods import podman, ui
+from airpods import podman, state, ui
 from airpods.config import REGISTRY
 from airpods.logging import console, status_spinner
-from airpods import state
 from airpods.services import ServiceManager, ServiceSpec, UnknownServiceError
 from airpods.system import check_dependency, detect_gpu
 
+HELP_OPTION_NAMES = ["-h", "--help"]
+COMMAND_CONTEXT = {"help_option_names": HELP_OPTION_NAMES}
+
 app = typer.Typer(
     help="Orchestrate local AI services (Ollama, Open WebUI) with Podman + UV.",
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={"help_option_names": []},
     rich_markup_mode="rich",
 )
 
 manager = ServiceManager(REGISTRY)
+
+COMMAND_ALIASES = {
+    "up": "start",
+    "down": "stop",
+    "ps": "status",
+}
+COMMAND_ALIAS_GROUPS: dict[str, List[str]] = {}
+for alias, canonical in COMMAND_ALIASES.items():
+    COMMAND_ALIAS_GROUPS.setdefault(canonical, []).append(alias)
+for alias_list in COMMAND_ALIAS_GROUPS.values():
+    alias_list.sort()
+
+HELP_EXAMPLES = [
+    ("airpods init", "Verify dependencies, volumes, and secrets before first run."),
+    ("airpods start", "Launch Ollama and Open WebUI with GPU auto-detect."),
+    ("airpods start --cpu open-webui", "Force CPU mode when starting only Open WebUI."),
+    ("airpods status", "Show pod health, ports, and ping results."),
+    ("airpods logs ollama -n 100", "Tail the latest Ollama logs."),
+]
+
+
+def _show_root_help(ctx: typer.Context) -> None:
+    console.print(f"[bold]airpods[/bold] v{__version__}")
+    console.print("Orchestrate local AI services (Ollama, Open WebUI) with Podman + UV.")
+    console.print()
+    console.print("[bold cyan]Usage[/bold cyan]")
+    console.print("  airpods [OPTIONS] COMMAND [ARGS]...\n")
+    console.print("[bold cyan]Commands[/bold cyan]")
+    console.print(_build_command_table(ctx))
+    console.print()
+    console.print("[bold cyan]Options[/bold cyan]")
+    console.print(_build_option_table(ctx))
+    console.print()
+    console.print("[bold cyan]Examples[/bold cyan]")
+    console.print(_build_examples_table())
+
+
+def _build_command_table(ctx: typer.Context) -> Table:
+    table = Table.grid(padding=(0, 3))
+    table.add_column(style="cyan", no_wrap=True)
+    table.add_column(style="magenta", no_wrap=True)
+    table.add_column()
+    for row in _command_help_rows(ctx):
+        table.add_row(*row)
+    return table
+
+
+def _build_option_table(ctx: typer.Context) -> Table:
+    table = Table.grid(padding=(0, 3))
+    table.add_column(style="cyan", no_wrap=True)
+    table.add_column(style="magenta", no_wrap=True)
+    table.add_column()
+    for row in _option_help_rows(ctx):
+        table.add_row(*row)
+    return table
+
+
+def _command_help_rows(ctx: typer.Context):
+    command_group = ctx.command
+    for name in command_group.list_commands(ctx):
+        command = command_group.get_command(ctx, name)
+        if not command or command.hidden:
+            continue
+        alias_text = ", ".join(COMMAND_ALIAS_GROUPS.get(name, []))
+        description = (command.help or command.short_help or "").strip()
+        yield (name, alias_text, description)
+
+
+def _option_help_rows(ctx: typer.Context):
+    for param in ctx.command.params:
+        if not isinstance(param, click.Option):
+            continue
+        name = _primary_long_option(param)
+        short_text = _format_short_options(param)
+        description = (param.help or "").strip()
+        yield (name, short_text, description)
+
+
+def _primary_long_option(param: click.Option) -> str:
+    for opt in param.opts:
+        if opt.startswith("--"):
+            return opt
+    return param.opts[0] if param.opts else ""
+
+
+def _format_short_options(param: click.Option) -> str:
+    seen: List[str] = []
+    for opt in list(param.opts) + list(param.secondary_opts):
+        if not opt.startswith("-") or opt.startswith("--"):
+            continue
+        if opt not in seen:
+            seen.append(opt)
+    return ", ".join(seen)
+
+
+def _build_examples_table() -> Table:
+    table = Table.grid(padding=(0, 3))
+    table.add_column(style="cyan", no_wrap=True)
+    table.add_column()
+    for command, description in HELP_EXAMPLES:
+        table.add_row(f"[bold]{command}[/]", description)
+    return table
+
+
+def _print_version() -> None:
+    console.print(f"airpods {__version__}")
+
+
+@app.callback(invoke_without_command=True)
+def _root_command(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "-v",
+        "--version",
+        help="Show CLI version and exit.",
+        is_eager=True,
+    ),
+    help_: bool = typer.Option(
+        False,
+        "--help",
+        "-h",
+        help="Show this message and exit.",
+        is_eager=True,
+    ),
+) -> None:
+    if version:
+        _print_version()
+        raise typer.Exit()
+    if help_:
+        _show_root_help(ctx)
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None:
+        _show_root_help(ctx)
 
 
 def _resolve_services(names: Optional[List[str]]) -> List[ServiceSpec]:
@@ -39,13 +176,13 @@ def _ensure_podman_available() -> None:
         raise typer.Exit(code=1)
 
 
-@app.command()
+@app.command(context_settings=COMMAND_CONTEXT)
 def version() -> None:
     """Show CLI version."""
-    console.print(f"airpods {__version__}")
+    _print_version()
 
 
-@app.command()
+@app.command(context_settings=COMMAND_CONTEXT)
 def init() -> None:
     """Verify tools, create volumes, and pre-pull images."""
     report = manager.report_environment()
@@ -74,7 +211,7 @@ def init() -> None:
     ui.success_panel("init complete. pods are ready to start.")
 
 
-@app.command()
+@app.command(context_settings=COMMAND_CONTEXT)
 def start(
     service: Optional[List[str]] = typer.Argument(None, help="Services to start (default: all)."),
     force_cpu: bool = typer.Option(False, "--cpu", help="Force CPU even if GPU is present."),
@@ -101,7 +238,10 @@ def start(
     ui.success_panel(f"start complete: {', '.join(spec.name for spec in specs)}")
 
 
-@app.command()
+app.command(name="up", help="[alias]Alias for start[/]", hidden=True, context_settings=COMMAND_CONTEXT)(start)
+
+
+@app.command(context_settings=COMMAND_CONTEXT)
 def stop(
     service: Optional[List[str]] = typer.Argument(None, help="Services to stop (default: all)."),
     remove: bool = typer.Option(False, "--remove", "-r", help="Remove pods after stopping."),
@@ -120,7 +260,10 @@ def stop(
     ui.success_panel(f"stop complete: {', '.join(spec.name for spec in specs)}")
 
 
-@app.command()
+app.command(name="down", help="[alias]Alias for stop[/]", hidden=True, context_settings=COMMAND_CONTEXT)(stop)
+
+
+@app.command(context_settings=COMMAND_CONTEXT)
 def status(service: Optional[List[str]] = typer.Argument(None, help="Services to report (default: all).")) -> None:
     """Show pod status."""
     specs = _resolve_services(service)
@@ -155,6 +298,15 @@ def status(service: Optional[List[str]] = typer.Argument(None, help="Services to
     console.print(table)
 
 
+app.command(name="ps", help="[alias]Alias for status[/]", hidden=True, context_settings=COMMAND_CONTEXT)(status)
+
+
+@app.command(context_settings=COMMAND_CONTEXT)
+def alias() -> None:
+    """Show command aliases."""
+    ui.show_command_aliases(COMMAND_ALIASES)
+
+
 def _extract_host_port(spec: ServiceSpec, port_bindings) -> Optional[int]:
     # Prefer actual bindings; fallback to configured host port.
     if port_bindings:
@@ -187,7 +339,7 @@ def _ping_service(spec: ServiceSpec, port: Optional[int]) -> str:
         return f"[warn]{type(exc).__name__}"
 
 
-@app.command()
+@app.command(context_settings=COMMAND_CONTEXT)
 def logs(
     service: Optional[List[str]] = typer.Argument(None, help="Services to show logs for (default: all)."),
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow logs."),
