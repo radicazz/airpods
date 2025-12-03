@@ -67,6 +67,7 @@ def register(app: typer.Typer) -> CommandMap:
         force: bool = typer.Option(
             False,
             "--force",
+            "-f",
             help="Skip confirmation prompt before replacing existing containers.",
         ),
     ) -> None:

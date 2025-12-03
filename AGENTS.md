@@ -56,3 +56,4 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 ## Development Workflow
 - Run `uv run pytest` to execute test suite.
 - Format code before commits to maintain consistent style.
+- Commit messages use lowercase prefixes such as `docs:`, `refactor:`, `feat:`, `fix:`, or `chore:` followed by a concise summary.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,6 +16,7 @@ except ImportError:  # pragma: no cover
 from airpods import state
 from airpods.cli import app
 import airpods.cli.completions as cli_completions
+import airpods.cli.help as cli_help
 from airpods.configuration import ConfigurationError, reload_config
 from airpods.configuration.loader import locate_config_file
 from airpods.services import EnvironmentReport
@@ -67,6 +69,30 @@ class TestCLIBasics:
         assert result.exit_code == 0
         assert "Usage" in result.stdout
         assert "airpods start" in result.stdout
+        assert "Start pods for specified services" in result.stdout
+
+    def test_config_help_lists_subcommands(self):
+        """Config --help should enumerate its subcommands for quick discovery."""
+        result = runner.invoke(app, ["config", "--help"])
+
+        assert result.exit_code == 0
+        assert "Commands" in result.stdout
+        assert "init" in result.stdout
+        assert "show" in result.stdout
+        assert "edit          --help" not in result.stdout
+
+
+class TestHelpRenderer:
+    def test_command_description_falls_back_to_docstring(self):
+        """Ensure help descriptions derive from docstrings when explicit help is missing."""
+
+        def sample():
+            """Docstring first line.
+
+            Additional detail ignored."""
+
+        command = SimpleNamespace(help=None, short_help=None, callback=sample)
+        assert cli_help._command_description(command) == "Docstring first line."
 
 
 class TestCommandAliases:

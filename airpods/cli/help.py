@@ -9,6 +9,7 @@ This module handles custom help display including:
 
 from __future__ import annotations
 
+import inspect
 from typing import Iterable, Sequence
 
 import click
@@ -49,12 +50,16 @@ def show_command_help(ctx: typer.Context) -> None:
         return
 
     renderables: list = []
-    description = (command.help or command.short_help or "").strip()
+    description = _command_description(command)
     if description:
         renderables.append(Text(description, style=PALETTE["fg"]))
 
     usage_text = Text(f"  {_format_usage_line(ctx)}", style=PALETTE["fg"])
     _append_section(renderables, "Usage", usage_text)
+
+    command_rows = command_help_rows(ctx)
+    if command_rows:
+        _append_section(renderables, "Commands", build_command_table(ctx))
 
     argument_rows = argument_help_rows(ctx)
     if argument_rows:
@@ -134,7 +139,7 @@ def build_argument_table(ctx: typer.Context) -> Table:
 
 def command_help_rows(ctx: typer.Context):
     command_group = ctx.command
-    if command_group is None:
+    if command_group is None or not isinstance(command_group, click.MultiCommand):
         return []
     rows = []
     for name in command_group.list_commands(ctx):
@@ -142,7 +147,7 @@ def command_help_rows(ctx: typer.Context):
         if not command or command.hidden:
             continue
         alias_text = ", ".join(COMMAND_ALIAS_GROUPS.get(name, []))
-        description = (command.help or command.short_help or "").strip()
+        description = _command_description(command)
         option_hint = command_param_hint(command)
         rows.append((name, alias_text, option_hint, description))
     return rows
@@ -179,7 +184,11 @@ def command_param_hint(command: click.Command) -> str:
     arguments = [param for param in command.params if isinstance(param, click.Argument)]
     if arguments:
         return format_argument_hint(arguments[0])
-    options = [param for param in command.params if isinstance(param, click.Option)]
+    options = [
+        param
+        for param in command.params
+        if isinstance(param, click.Option) and not _is_help_option(param)
+    ]
     if options:
         return primary_long_option(options[0]) or options[0].opts[0]
     return ""
@@ -249,3 +258,22 @@ def _render_help_panel(renderables: list) -> None:
         text_style=PALETTE["fg"],
     )
     console.print(panel)
+
+
+def _command_description(command: click.Command | None) -> str:
+    if command is None:
+        return ""
+    text = (getattr(command, "help", None) or getattr(command, "short_help", None) or "").strip()
+    if text:
+        return text
+    callback = getattr(command, "callback", None)
+    if callback:
+        doc = inspect.getdoc(callback) or ""
+        if doc:
+            return doc.splitlines()[0].strip()
+    return ""
+
+
+def _is_help_option(param: click.Option) -> bool:
+    option_names = set(param.opts) | set(param.secondary_opts)
+    return any(opt in option_names for opt in HELP_OPTION_NAMES)
