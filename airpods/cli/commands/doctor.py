@@ -8,13 +8,27 @@ from airpods import ui
 from airpods.logging import console
 
 from ..common import COMMAND_CONTEXT, DOCTOR_REMEDIATIONS, manager
+from ..help import show_command_help
 from ..type_defs import CommandMap
 
 
 def register(app: typer.Typer) -> CommandMap:
-    @app.command(context_settings=COMMAND_CONTEXT)
-    def doctor() -> None:
+    @app.command(context_settings={**COMMAND_CONTEXT, "help_option_names": []})
+    def doctor(
+        ctx: typer.Context,
+        help_: bool = typer.Option(
+            False,
+            "--help",
+            "-h",
+            help="Show this message and exit.",
+            is_eager=True,
+        ),
+    ) -> None:
         """Re-run environment checks without mutating resources."""
+        if help_:
+            show_command_help(ctx)
+            raise typer.Exit()
+
         report = manager.report_environment()
         ui.show_environment(report)
 

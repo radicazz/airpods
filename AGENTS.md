@@ -5,9 +5,9 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 
 ## Command Surface
 - Global options: `-v/--version` prints the CLI version; `-h/--help` shows the custom help view plus alias table.
-- `init`: Verify dependencies (podman, podman-compose, uv, optional nvidia-smi), create volumes, pull images, summarize readiness.
-- `start [service...]`: Ensure volumes/images, then launch pods (default both). GPU auto-detected and attached to Ollama; CPU fallback allowed. Exposed aliases: `up`.
-- `stop [service...]`: Graceful stop; optional removal of pods while preserving volumes by default. Exposed aliases: `down`.
+- `init`: Verify dependencies (podman, podman-compose, uv, optional nvidia-smi), create volumes, pull images, summarize readiness, and report whether each resource was created or already present.
+- `start [service...]`: Ensure volumes/images, then launch pods (default both) while explaining when networks, volumes, pods, or containers are reused vs newly created. Prompts before replacing existing containers unless the user passes `--force`. GPU auto-detected and attached to Ollama; CPU fallback allowed. Exposed aliases: `up`.
+- `stop [service...]`: Graceful stop; optional removal of pods while preserving volumes by default, with an interactive confirmation prompt before destructive removal. Exposed aliases: `down`.
 - `status [service...]`: Rich table showing pod/container state, ports, uptime, and an HTTP ping per service. Exposed aliases: `ps`.
 - `logs [service...]`: Tail logs for specified services or all; supports follow/since/lines.
 - `doctor`: Re-run checks without creating resources; surfaces remediation hints without touching pods/volumes.

@@ -12,23 +12,25 @@ User-friendly CLI for orchestrating local AI services with ease.
 
 ## Getting Started
 
-Make sure you have the following:
+You will need the following before you get started:
 
-- Podman (with podman-compose)
-- Python (with uv)
-- [optional] NVIDIA GPU Drivers
+- `uv`: Manages the Python environment & dependencies.
+- `podman`: Containerized runtime for the AI services.
+- `podman-compose`: Required for wiring multiple containers together.
+- *(optional)* `nvidia-smi` + NVIDIA drivers: unlock GPU acceleration when available.
 
-Setup the tool:
+Installing the CLI:
 
 ```bash
-# Install globally (recommended for users)
-uv tool install --from . airpods
+git clone https://github.com/radicazz/airpods.git
+cd airpods
 
-# Install locally (recommended for development)
-uv venv
-source .venv/bin/activate
+uv venv && source .venv/bin/activate
 uv pip install -e .
 ```
+
+> [!NOTE]
+> Use `uv tool install --from . airpods` to install the tool globally!
 
 Use the CLI:
 
@@ -45,12 +47,6 @@ airpods stop
 ```
 
 Feel free to run `airpods --help` to see a full list of available commands.
-
-## Data locations
-
-- Podman named volumes keep service data persistent (`airpods_ollama_data`, `airpods_webui_data`), so you can prune pods without losing models or WebUI history.
-- Secrets and other configs live under `~/.config/airpods` (or `$AIRPODS_HOME` / `$XDG_CONFIG_HOME` when set); for example the Open WebUI secret resides at `webui_secret` inside that folder.
-- Both volumes and configs are outside your git checkout by default, keeping the repo clean. Remove them via `podman volume rm` or by deleting the config folder to reset your environment.
 
 ## License
 

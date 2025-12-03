@@ -44,9 +44,9 @@ def volume_exists(name: str) -> bool:
         return False
 
 
-def ensure_volume(name: str) -> None:
+def ensure_volume(name: str) -> bool:
     if volume_exists(name):
-        return
+        return False
     try:
         _run(["volume", "create", name], capture=False)
     except subprocess.CalledProcessError as exc:
@@ -55,6 +55,7 @@ def ensure_volume(name: str) -> None:
         if detail:
             msg = f"{msg}: {detail}"
         raise PodmanError(msg) from exc
+    return True
 
 
 def network_exists(name: str) -> bool:
@@ -65,9 +66,9 @@ def network_exists(name: str) -> bool:
         return False
 
 
-def ensure_network(name: str) -> None:
+def ensure_network(name: str) -> bool:
     if network_exists(name):
-        return
+        return False
     try:
         _run(["network", "create", name], capture=False)
     except subprocess.CalledProcessError as exc:
@@ -76,6 +77,7 @@ def ensure_network(name: str) -> None:
         if detail:
             msg = f"{msg}: {detail}"
         raise PodmanError(msg) from exc
+    return True
 
 
 def pull_image(image: str) -> None:
@@ -107,9 +109,9 @@ def container_exists(name: str) -> bool:
 
 def ensure_pod(
     pod: str, ports: Iterable[tuple[int, int]], network: str = "airpods_network"
-) -> None:
+) -> bool:
     if pod_exists(pod):
-        return
+        return False
     args = ["pod", "create", "--name", pod, "--network", network]
     for host, container in ports:
         args.extend(["-p", f"{host}:{container}"])
@@ -121,6 +123,7 @@ def ensure_pod(
         if detail:
             msg = f"{msg}: {detail}"
         raise PodmanError(msg) from exc
+    return True
 
 
 def run_container(
@@ -131,7 +134,8 @@ def run_container(
     env: Dict[str, str],
     volumes: Iterable[tuple[str, str]],
     gpu: bool = False,
-) -> None:
+) -> bool:
+    existed = container_exists(name)
     args: List[str] = [
         "run",
         "--detach",
@@ -158,6 +162,7 @@ def run_container(
         if detail:
             msg = f"{msg}: {detail}"
         raise PodmanError(msg) from exc
+    return existed
 
 
 def pod_status() -> List[Dict]:

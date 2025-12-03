@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from airpods import podman, state
 from airpods.system import CheckResult, check_dependency, detect_gpu
@@ -48,6 +58,25 @@ class ServiceSpec:
         if self.env_factory:
             data.update(self.env_factory())
         return data
+
+
+@dataclass(frozen=True)
+class VolumeEnsureResult:
+    source: str
+    target: str
+    kind: Literal["bind", "volume"]
+    created: bool
+
+
+@dataclass(frozen=True)
+class ServiceStartResult:
+    spec: ServiceSpec
+    pod_created: bool
+    container_replaced: bool
+
+
+ProgressPhase = Literal["start", "end"]
+ProgressCallback = Callable[[ProgressPhase, int, int, ServiceSpec], None]
 
 
 class ServiceRegistry:
@@ -125,30 +154,64 @@ class ServiceManager:
     # ----------------------------------------------------------------------------------
     # Pod + container orchestration
     # ----------------------------------------------------------------------------------
-    def ensure_network(self) -> None:
+    def ensure_network(self) -> bool:
         """Create the shared pod network if it doesn't exist."""
-        podman.ensure_network(self.network_name)
+        return podman.ensure_network(self.network_name)
 
-    def ensure_volumes(self, specs: Iterable[ServiceSpec]) -> None:
+    def ensure_volumes(self, specs: Iterable[ServiceSpec]) -> List[VolumeEnsureResult]:
         """Create all volumes required by the given service specs."""
+        results: List[VolumeEnsureResult] = []
+        handled: set[tuple[str, str]] = set()
         for spec in specs:
             for mount in spec.volumes:
+                key = ("bind" if mount.is_bind_mount else "volume", mount.source)
+                if key in handled:
+                    continue
+                handled.add(key)
                 if mount.is_bind_mount:
-                    state.ensure_volume_source(mount.source)
-                else:
-                    podman.ensure_volume(mount.source)
+                    _, created = state.ensure_volume_source(mount.source)
+                    results.append(
+                        VolumeEnsureResult(
+                            source=mount.source,
+                            target=mount.target,
+                            kind="bind",
+                            created=created,
+                        )
+                    )
+                    continue
+                created = podman.ensure_volume(mount.source)
+                results.append(
+                    VolumeEnsureResult(
+                        source=mount.source,
+                        target=mount.target,
+                        kind="volume",
+                        created=created,
+                    )
+                )
+        return results
 
-    def pull_images(self, specs: Iterable[ServiceSpec]) -> None:
+    def pull_images(
+        self,
+        specs: Iterable[ServiceSpec],
+        *,
+        progress_callback: ProgressCallback | None = None,
+    ) -> None:
         """Pull container images for the given service specs."""
-        for spec in specs:
+        spec_list = list(specs)
+        total = len(spec_list)
+        for index, spec in enumerate(spec_list, start=1):
+            if progress_callback:
+                progress_callback("start", index, total, spec)
             podman.pull_image(spec.image)
+            if progress_callback:
+                progress_callback("end", index, total, spec)
 
     def start_service(
         self, spec: ServiceSpec, *, gpu_available: bool, force_cpu: bool = False
-    ) -> None:
+    ) -> ServiceStartResult:
         """Start a service by creating its pod and running its container."""
-        podman.ensure_pod(spec.pod, spec.ports, network=self.network_name)
-        podman.run_container(
+        pod_created = podman.ensure_pod(spec.pod, spec.ports, network=self.network_name)
+        container_replaced = podman.run_container(
             pod=spec.pod,
             name=spec.container,
             image=spec.image,
@@ -156,6 +219,13 @@ class ServiceManager:
             volumes=[mount.as_tuple() for mount in spec.volumes],
             gpu=spec.needs_gpu and gpu_available and not force_cpu,
         )
+        return ServiceStartResult(
+            spec=spec, pod_created=pod_created, container_replaced=container_replaced
+        )
+
+    def container_exists(self, spec: ServiceSpec) -> bool:
+        """Return True if the service's container already exists."""
+        return podman.container_exists(spec.container)
 
     def stop_service(
         self, spec: ServiceSpec, *, remove: bool = False, timeout: int = 10

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Tuple
 
+import typer
 from rich import box
+from rich.console import RenderableType
 from rich.panel import Panel
+from rich.prompt import Confirm
 from rich.table import Table
 
 from airpods.logging import PALETTE, console
@@ -45,13 +48,15 @@ def themed_grid(*, padding: Tuple[int, int] = (0, 3), expand: bool = False) -> T
 
 
 def themed_panel(
-    message: str,
+    message: RenderableType,
     *,
     border_color: str,
     text_style: str | None = None,
 ) -> Panel:
     """Return a Rich Panel styled with the shared palette."""
-    return Panel.fit(message, border_style=border_color, style=text_style or PALETTE["fg"])
+    return Panel.fit(
+        message, border_style=border_color, style=text_style or PALETTE["fg"]
+    )
 
 
 def show_environment(report: EnvironmentReport) -> None:
@@ -80,6 +85,24 @@ def success_panel(message: str) -> None:
 def info_panel(message: str) -> None:
     """Display an info message with standard styling."""
     console.print(f"[info]{message}[/]")
+
+
+def confirm_action(message: str, *, default: bool = False) -> bool:
+    """Show a Rich-styled confirmation prompt and return the user's choice."""
+    prompt = message.strip() or "Proceed?"
+    try:
+        return Confirm.ask(
+            f"[accent]?[/] {prompt}",
+            default=default,
+            show_default=True,
+            console=console,
+        )
+    except KeyboardInterrupt:  # pragma: no cover - interactive guard
+        console.print("[warn]Prompt cancelled by user.[/]")
+        raise typer.Abort() from None
+    except EOFError:  # pragma: no cover - interactive guard
+        console.print("[warn]No input detected; cancelling.[/]")
+        raise typer.Abort() from None
 
 
 def _clean_detail(name: str, detail: str) -> str:

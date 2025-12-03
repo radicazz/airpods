@@ -50,11 +50,13 @@ def _normalize_source(path: Union[str, os.PathLike[str]]) -> Path:
     return Path(path).expanduser()
 
 
-def ensure_volume_source(source: Union[str, os.PathLike[str]]) -> Path:
+def ensure_volume_source(source: Union[str, os.PathLike[str]]) -> tuple[Path, bool]:
     path = _normalize_source(source)
+    existed = path.exists()
     if path.is_absolute():
         path.mkdir(parents=True, exist_ok=True)
-    return path
+    created = path.is_absolute() and not existed
+    return path, created
 
 
 def webui_secret_path() -> Path:
