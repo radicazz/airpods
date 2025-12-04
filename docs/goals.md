@@ -1,4 +1,4 @@
-# docs/goals.md
+# docs/goals
 
 ## Purpose
 

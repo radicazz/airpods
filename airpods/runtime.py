@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 from typing import Any, Dict, Iterable, List, Optional, Protocol
 
 from airpods import podman
