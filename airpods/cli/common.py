@@ -8,7 +8,7 @@ from airpods import __version__, podman
 from airpods.config import REGISTRY
 from airpods.configuration import get_config
 from airpods.logging import console
-from airpods.services import ServiceManager, ServiceSpec, UnknownServiceError
+from airpods.services import ServiceManager, ServiceSpec, UnknownServiceError, VolumeEnsureResult
 
 HELP_OPTION_NAMES = ("-h", "--help")
 COMMAND_CONTEXT = {"help_option_names": []}
@@ -62,3 +62,23 @@ def ensure_podman_available() -> None:
 
 def print_version() -> None:
     console.print(f"[bold]airpods[/bold] [accent]v{__version__}[/]")
+
+
+def print_network_status(created: bool, network_name: str) -> None:
+    """Display network creation or reuse status."""
+    if created:
+        console.print(f"[ok]Created network {network_name}[/]")
+    else:
+        console.print(f"[info]Network {network_name} already exists; reusing[/]")
+
+
+def print_volume_status(results: list[VolumeEnsureResult]) -> None:
+    """Display volume creation or reuse status for multiple volumes."""
+    for result in results:
+        label = "bind mount" if result.kind == "bind" else "volume"
+        if result.created:
+            console.print(f"[ok]Created {label} {result.source} -> {result.target}")
+        else:
+            console.print(
+                f"[info]{label.capitalize()} {result.source} already exists; reusing"
+            )

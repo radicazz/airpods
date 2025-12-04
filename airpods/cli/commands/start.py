@@ -11,30 +11,17 @@ from airpods.logging import console, status_spinner, step_progress
 from airpods.system import detect_gpu
 from airpods.services import ServiceStartResult, VolumeEnsureResult
 
-from ..common import COMMAND_CONTEXT, ensure_podman_available, manager, resolve_services
+from ..common import (
+    COMMAND_CONTEXT,
+    ensure_podman_available,
+    manager,
+    print_network_status,
+    print_volume_status,
+    resolve_services,
+)
 from ..completions import service_name_completion
 from ..help import command_help_option, maybe_show_command_help
 from ..type_defs import CommandMap
-
-
-def _print_network_status(created: bool) -> None:
-    if created:
-        console.print(f"[ok]Created network {manager.network_name}[/]")
-    else:
-        console.print(
-            f"[info]Network {manager.network_name} already exists; reusing[/]"
-        )
-
-
-def _print_volume_status(results: list[VolumeEnsureResult]) -> None:
-    for result in results:
-        label = "bind mount" if result.kind == "bind" else "volume"
-        if result.created:
-            console.print(f"[ok]Created {label} {result.source} -> {result.target}")
-        else:
-            console.print(
-                f"[info]{label.capitalize()} {result.source} already exists; reusing"
-            )
 
 
 def _print_service_start_status(result: ServiceStartResult) -> None:
@@ -83,11 +70,11 @@ def register(app: typer.Typer) -> CommandMap:
 
         with status_spinner("Ensuring network"):
             network_created = manager.ensure_network()
-        _print_network_status(network_created)
+        print_network_status(network_created, manager.network_name)
 
         with status_spinner("Ensuring volumes"):
             volume_results = manager.ensure_volumes(specs)
-        _print_volume_status(volume_results)
+        print_volume_status(volume_results)
 
         with step_progress("Pulling images", total=spec_count) as progress:
 

@@ -66,6 +66,11 @@ def ensure_webui_secret() -> str:
     secret_file = webui_secret_path()
     if secret_file.exists():
         return secret_file.read_text(encoding="utf-8").strip()
+    secret_file.parent.mkdir(parents=True, exist_ok=True)
     secret = secrets.token_urlsafe(32)
-    secret_file.write_text(secret, encoding="utf-8")
+    try:
+        with secret_file.open("x", encoding="utf-8") as f:
+            f.write(secret)
+    except FileExistsError:
+        return secret_file.read_text(encoding="utf-8").strip()
     return secret

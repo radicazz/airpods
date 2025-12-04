@@ -99,10 +99,10 @@ def confirm_action(message: str, *, default: bool = False) -> bool:
         )
     except KeyboardInterrupt:  # pragma: no cover - interactive guard
         console.print("[warn]Prompt cancelled by user.[/]")
-        raise typer.Abort() from None
+        raise typer.Abort()
     except EOFError:  # pragma: no cover - interactive guard
         console.print("[warn]No input detected; cancelling.[/]")
-        raise typer.Abort() from None
+        raise typer.Abort()
 
 
 def _clean_detail(name: str, detail: str) -> str:

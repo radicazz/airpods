@@ -390,19 +390,22 @@ def _coerce_value(
 def _check_config_warnings(config) -> None:
     warnings: list[str] = []
 
-    used_ports: dict[int, str] = {}
+    used_ports: dict[int, list[str]] = {}
     for service_name, service in config.services.items():
         if not service.enabled:
             continue
         if not service.ports:
             continue
-        host_port = service.ports[0].host
-        if host_port in used_ports:
-            warnings.append(
-                f"Port conflict: {service_name} and {used_ports[host_port]} use host port {host_port}"
-            )
-        else:
-            used_ports[host_port] = service_name
+        for port_mapping in service.ports:
+            host_port = port_mapping.host
+            if host_port in used_ports:
+                for existing_service in used_ports[host_port]:
+                    warnings.append(
+                        f"Port conflict: {service_name} and {existing_service} use host port {host_port}"
+                    )
+                used_ports[host_port].append(service_name)
+            else:
+                used_ports[host_port] = [service_name]
         if service.image.endswith(":latest"):
             warnings.append(
                 f"{service_name}: using ':latest' image tag (consider pinning the version)"

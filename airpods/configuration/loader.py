@@ -86,7 +86,7 @@ def load_config() -> AirpodsConfig:
         config_data = merge_configs(config_data, user_config)
     try:
         config = AirpodsConfig.from_dict(config_data)
-    except Exception as exc:  # pragma: no cover - validation detail
+    except ValueError as exc:
         raise ConfigurationError(f"Invalid configuration: {exc}") from exc
     config = _apply_runtime_defaults(config)
     config = resolve_templates(config)

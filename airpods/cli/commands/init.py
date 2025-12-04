@@ -4,35 +4,12 @@ from __future__ import annotations
 
 import typer
 
-from typing import Iterable
-
 from airpods import state, ui
 from airpods.logging import console, status_spinner, step_progress
-from airpods.services import VolumeEnsureResult
 
-from ..common import COMMAND_CONTEXT, manager
+from ..common import COMMAND_CONTEXT, manager, print_network_status, print_volume_status
 from ..help import command_help_option, maybe_show_command_help
 from ..type_defs import CommandMap
-
-
-def _print_network_status(created: bool) -> None:
-    if created:
-        console.print(f"[ok]Created network {manager.network_name}[/]")
-    else:
-        console.print(
-            f"[info]Network {manager.network_name} already exists; reusing[/]"
-        )
-
-
-def _print_volume_status(results: Iterable[VolumeEnsureResult]) -> None:
-    for result in results:
-        label = "bind mount" if result.kind == "bind" else "volume"
-        if result.created:
-            console.print(f"[ok]Created {label} {result.source} -> {result.target}")
-        else:
-            console.print(
-                f"[info]{label.capitalize()} {result.source} already exists; reusing"
-            )
 
 
 def register(app: typer.Typer) -> CommandMap:
@@ -54,13 +31,13 @@ def register(app: typer.Typer) -> CommandMap:
 
         with status_spinner("Ensuring network"):
             network_created = manager.ensure_network()
-        _print_network_status(network_created)
+        print_network_status(network_created, manager.network_name)
 
         specs = manager.resolve(None)
 
         with status_spinner("Ensuring volumes"):
             volume_results = manager.ensure_volumes(specs)
-        _print_volume_status(volume_results)
+        print_volume_status(volume_results)
 
         with step_progress("Pulling images", total=len(specs)) as progress:
 

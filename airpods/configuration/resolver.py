@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 from .errors import ConfigurationError
 from .schema import AirpodsConfig
 
 TEMPLATE_PATTERN = re.compile(r"\{\{([^}]+)\}\}")
+MAX_RESOLUTION_DEPTH = 100
 
 
 def resolve_templates(config: AirpodsConfig) -> AirpodsConfig:
@@ -46,22 +47,41 @@ def resolve_templates(config: AirpodsConfig) -> AirpodsConfig:
 
 def _resolve_string(template: str, context: Dict[str, Any], *, location: str) -> str:
     missing: list[str] = []
+    seen_refs: Set[str] = set()
+    iteration = 0
 
-    def _replace(match: re.Match[str]) -> str:
-        path = match.group(1).strip()
-        value = _lookup_path(path, context)
-        if value is None:
-            missing.append(path)
-            return match.group(0)
-        return str(value)
+    current = template
+    while "{{" in current:
+        if iteration >= MAX_RESOLUTION_DEPTH:
+            raise ConfigurationError(
+                f"Circular reference or excessive nesting detected in {location}"
+            )
+        iteration += 1
 
-    resolved = TEMPLATE_PATTERN.sub(_replace, template)
+        def _replace(match: re.Match[str]) -> str:
+            path = match.group(1).strip()
+            if path in seen_refs:
+                raise ConfigurationError(
+                    f"Circular reference detected: {{{{path}}}} in {location}"
+                )
+            seen_refs.add(path)
+            value = _lookup_path(path, context)
+            if value is None:
+                missing.append(path)
+                return match.group(0)
+            return str(value)
+
+        resolved = TEMPLATE_PATTERN.sub(_replace, current)
+        if resolved == current:
+            break
+        current = resolved
+
     if missing:
         refs = ", ".join(sorted(set(missing)))
         raise ConfigurationError(
             f"Unknown template reference(s) [{refs}] in {location}"
         )
-    return resolved
+    return current
 
 
 def _lookup_path(path: str, context: Dict[str, Any]) -> Any:
