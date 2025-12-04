@@ -6,9 +6,9 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 ## Command Surface
 - Global options: `-v/--version` prints the CLI version; `-h/--help` shows the custom help view plus alias table.
 - `init`: Verify dependencies (podman, podman-compose, uv, optional nvidia-smi), create volumes, pull images, summarize readiness, and report whether each resource was created or already present.
-- `start [service...]`: Ensure volumes/images, then launch pods (default both) while explaining when networks, volumes, pods, or containers are reused vs newly created. Prompts before replacing existing containers unless the user passes `--force`. GPU auto-detected and attached to Ollama; CPU fallback allowed. Exposed aliases: `up`.
+- `start [service...]`: Ensure volumes/images, then launch pods (default both) while explaining when networks, volumes, pods, or containers are reused vs newly created. Waits for each service to report healthy (HTTP ping when available) for up to `cli.startup_timeout` seconds, polling every `cli.startup_check_interval` seconds, with health-less services marked ready once their pod is running. Prompts before replacing existing containers unless the user passes `--force`. GPU auto-detected and attached to Ollama; CPU fallback allowed. Exposed aliases: `up`.
 - `stop [service...]`: Graceful stop; optional removal of pods while preserving volumes by default, with an interactive confirmation prompt before destructive removal. Exposed aliases: `down`.
-- `status [service...]`: Rich table showing pod/container state, ports, uptime, and an HTTP ping per service. Exposed aliases: `ps`.
+- `status [service...]`: Compact Rich table (Service / Status / Info) summarizing HTTP health plus friendly URLs for running pods, or pod status + port summaries for stopped ones; redundant columns (pod name, uptime, counts) were removed for readability. Exposed aliases: `ps`.
 - `logs [service...]`: Tail logs for specified services or all; supports follow/since/lines.
 - `doctor`: Re-run checks without creating resources; surfaces remediation hints without touching pods/volumes.
 - `config`: Manage configuration with subcommands:
@@ -31,7 +31,7 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
   - `airpods/cli/type_defs.py` – shared Typer command mapping type alias.
 - Configuration system:
   - `airpods/configuration/` – Pydantic-based config schema, loader, template resolver, and error types.
-  - `airpods/configuration/schema.py` – ServiceConfig, RuntimeConfig, CLIConfig, DependenciesConfig models.
+  - `airpods/configuration/schema.py` – ServiceConfig, RuntimeConfig, CLIConfig, DependenciesConfig models (CLIConfig includes `startup_timeout`/`startup_check_interval` knobs used by `start`).
   - `airpods/configuration/defaults.py` – Built-in default configuration dictionary.
   - `airpods/configuration/loader.py` – Config file discovery, TOML loading, merging, caching.
   - `airpods/configuration/resolver.py` – Template variable resolution (`{{runtime.host_gateway}}`, `{{services.ollama.ports.0.host}}`).

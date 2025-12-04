@@ -35,41 +35,30 @@ def render_status(specs: List[ServiceSpec]) -> None:
         pod_rows = {}
     table = ui.themed_table(title="[accent]Pods[/accent]")
     table.add_column("Service")
-    table.add_column("Pod")
     table.add_column("Status")
-    table.add_column("Ports")
-    table.add_column("Containers")
-    table.add_column("Health")
-    table.add_column("URL")
+    table.add_column("Info", no_wrap=False)
 
     for spec in specs:
         row = pod_rows.get(spec.pod) if pod_rows else None
         if not row:
-            table.add_row(spec.name, spec.pod, "[warn]absent", "-", "-", "-", "-")
+            table.add_row(spec.name, "[warn]absent", "-")
             continue
-        port_bindings = manager.service_ports(spec)
-        ports: list[str] = []
-        for container_port, bindings in port_bindings.items():
-            for binding in bindings or []:
-                host_port = binding.get("HostPort", "")
-                ports.append(f"{host_port}->{container_port}")
-        ports_display = (
-            ", ".join(ports) if ports else format_row_ports(row.get("Ports"))
-        )
-        containers = container_count(row)
-        host_ports = collect_host_ports(spec, port_bindings)
-        host_port = host_ports[0] if host_ports else None
-        health = ping_service(spec, host_port)
-        url_text = ", ".join(format_host_urls(host_ports)) if host_ports else "-"
-        table.add_row(
-            spec.name,
-            spec.pod,
-            row.get("Status", "?"),
-            ports_display,
-            containers,
-            health,
-            url_text,
-        )
+
+        status = row.get("Status", "?")
+
+        if status == "Running":
+            port_bindings = manager.service_ports(spec)
+            host_ports = collect_host_ports(spec, port_bindings)
+            host_port = host_ports[0] if host_ports else None
+            health = ping_service(spec, host_port)
+            url_text = ", ".join(format_host_urls(host_ports)) if host_ports else "-"
+            table.add_row(spec.name, health, url_text)
+        elif status == "Exited":
+            port_bindings = manager.service_ports(spec)
+            ports_display = format_port_bindings(port_bindings)
+            table.add_row(spec.name, f"[warn]{status}", ports_display)
+        else:
+            table.add_row(spec.name, f"[warn]{status}", "-")
 
     console.print(table)
 
@@ -100,26 +89,15 @@ def format_host_urls(host_ports: List[int]) -> List[str]:
     return [f"http://localhost:{port}" for port in host_ports]
 
 
-def format_row_ports(entries: Optional[list[str]]) -> str:
-    if not entries:
-        return "-"
-    cleaned = []
-    for entry in entries:
-        text = entry or ""
-        if "/" in text:
-            text = text.split("/", 1)[0]
-        cleaned.append(text)
-    return ", ".join(cleaned) if cleaned else "-"
-
-
-def container_count(row: dict[str, Any]) -> str:
-    value = row.get("NumberOfContainers")
-    if isinstance(value, int):
-        return str(value)
-    containers = row.get("Containers") or row.get("ContainerInfo")
-    if isinstance(containers, list):
-        return str(len(containers))
-    return "?"
+def format_port_bindings(port_bindings: dict[str, Any]) -> str:
+    """Format port bindings for display."""
+    ports: list[str] = []
+    for container_port, bindings in port_bindings.items():
+        for binding in bindings or []:
+            host_port = binding.get("HostPort", "")
+            if host_port:
+                ports.append(f"{host_port}->{container_port}")
+    return ", ".join(ports) if ports else "-"
 
 
 def ping_service(spec: ServiceSpec, port: Optional[int]) -> str:
@@ -159,3 +137,28 @@ def ping_service(spec: ServiceSpec, port: Optional[int]) -> str:
         # Fallback for unexpected errors; log for debugging
         console.print(f"[dim]Unexpected error pinging {spec.name}: {exc}[/dim]")
         return f"[error]{type(exc).__name__}"
+
+
+def check_service_health(spec: ServiceSpec, port: Optional[int]) -> bool:
+    """Check if a service is healthy (returns True/False).
+
+    Args:
+        spec: Service specification containing health_path
+        port: Host port to connect to
+
+    Returns:
+        True if service is healthy (2xx-3xx response), False otherwise
+    """
+    if not spec.health_path or port is None:
+        return False
+    try:
+        conn = http.client.HTTPConnection(
+            "127.0.0.1", port, timeout=DEFAULT_PING_TIMEOUT
+        )
+        conn.request("GET", spec.health_path)
+        resp = conn.getresponse()
+        code = resp.status
+        conn.close()
+        return 200 <= code < 400
+    except Exception:
+        return False

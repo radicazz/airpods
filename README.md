@@ -1,5 +1,7 @@
 # airpods
 
+[![Tests](https://github.com/radicazz/airpods/actions/workflows/test.yml/badge.svg)](https://github.com/radicazz/airpods/actions/workflows/test.yml)
+
 User-friendly CLI for orchestrating local AI services with ease.
 
 ## Features

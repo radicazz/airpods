@@ -25,6 +25,8 @@ class CLIConfig(BaseModel):
     stop_timeout: int = Field(default=10, ge=1, le=300)
     log_lines: int = Field(default=200, ge=1, le=10000)
     ping_timeout: float = Field(default=2.0, ge=0.1, le=60.0)
+    startup_timeout: int = Field(default=120, ge=10, le=600)
+    startup_check_interval: float = Field(default=2.0, ge=0.5, le=10.0)
     auto_confirm: bool = False
     debug: bool = False
 

@@ -5,9 +5,12 @@ from __future__ import annotations
 from typing import Optional
 
 import typer
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.table import Table
 
 from airpods import ui
-from airpods.logging import console, step_progress
+from airpods.logging import console
 
 from ..common import (
     COMMAND_CONTEXT,
@@ -41,7 +44,6 @@ def register(app: typer.Typer) -> CommandMap:
         """Stop pods for specified services; confirms before destructive removal."""
         maybe_show_command_help(ctx, help_)
         specs = resolve_services(service)
-        spec_count = len(specs)
         ensure_podman_available()
         if remove and specs:
             lines = "\n".join(f"  - {spec.name} ({spec.pod})" for spec in specs)
@@ -52,15 +54,40 @@ def register(app: typer.Typer) -> CommandMap:
             if not ui.confirm_action(prompt, default=False):
                 console.print("[warn]Stop cancelled by user.[/]")
                 raise typer.Abort()
-        with step_progress("Stopping services", total=spec_count) as progress:
-            for index, spec in enumerate(specs, start=1):
-                progress.start(index, spec.name)
+
+        service_states: dict[str, str] = {spec.name: "stopping" for spec in specs}
+
+        def _make_table() -> Table:
+            """Create the live-updating status table."""
+            table = Table(
+                title="[info]Stopping Services", show_header=True, header_style="bold"
+            )
+            table.add_column("Service", style="cyan")
+            table.add_column("Status", style="")
+
+            for spec in specs:
+                state = service_states[spec.name]
+                if state == "stopping":
+                    spinner = Spinner("dots", style="info")
+                    table.add_row(spec.name, spinner)
+                elif state == "stopped":
+                    table.add_row(spec.name, "[ok]✓ Stopped")
+                elif state == "removed":
+                    table.add_row(spec.name, "[ok]✓ Removed")
+                elif state == "not_found":
+                    table.add_row(spec.name, "[warn]⊘ Not found")
+
+            return table
+
+        with Live(_make_table(), refresh_per_second=4, console=console) as live:
+            for spec in specs:
                 existed = manager.stop_service(spec, remove=remove, timeout=timeout)
-                progress.advance()
                 if not existed:
-                    console.print(f"[warn]{spec.pod} not found; skipping[/]")
-                    continue
-                console.print(f"[ok]{spec.name} stopped[/]")
-        ui.success_panel(f"stop complete: {', '.join(spec.name for spec in specs)}")
+                    service_states[spec.name] = "not_found"
+                elif remove:
+                    service_states[spec.name] = "removed"
+                else:
+                    service_states[spec.name] = "stopped"
+                live.update(_make_table())
 
     return {"stop": stop}

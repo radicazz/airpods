@@ -23,6 +23,8 @@ _CONFIG = get_config()
 DEFAULT_STOP_TIMEOUT = _CONFIG.cli.stop_timeout
 DEFAULT_LOG_LINES = _CONFIG.cli.log_lines
 DEFAULT_PING_TIMEOUT = _CONFIG.cli.ping_timeout
+DEFAULT_STARTUP_TIMEOUT = _CONFIG.cli.startup_timeout
+DEFAULT_STARTUP_CHECK_INTERVAL = _CONFIG.cli.startup_check_interval
 
 DOCTOR_REMEDIATIONS = {
     "podman": "Install Podman: https://podman.io/docs/installation",

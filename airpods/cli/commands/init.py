@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import typer
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.table import Table
 
 from airpods import state, ui
-from airpods.logging import console, status_spinner, step_progress
+from airpods.logging import console, status_spinner
 
 from ..common import COMMAND_CONTEXT, manager, print_network_status, print_volume_status
 from ..help import command_help_option, maybe_show_command_help
@@ -39,14 +42,37 @@ def register(app: typer.Typer) -> CommandMap:
             volume_results = manager.ensure_volumes(specs)
         print_volume_status(volume_results)
 
-        with step_progress("Pulling images", total=len(specs)) as progress:
+        image_states: dict[str, str] = {spec.name: "pending" for spec in specs}
+
+        def _make_table() -> Table:
+            """Create the live-updating image pull table."""
+            table = Table(
+                title="[info]Pulling Images", show_header=True, header_style="bold"
+            )
+            table.add_column("Service", style="cyan")
+            table.add_column("Image", style="dim")
+            table.add_column("Status", style="")
+
+            for spec in specs:
+                state_val = image_states[spec.name]
+                if state_val == "pending":
+                    table.add_row(spec.name, spec.image, "[dim]Waiting...")
+                elif state_val == "pulling":
+                    spinner = Spinner("dots", style="info")
+                    table.add_row(spec.name, spec.image, spinner)
+                elif state_val == "done":
+                    table.add_row(spec.name, spec.image, "[ok]✓ Ready")
+
+            return table
+
+        with Live(_make_table(), refresh_per_second=4, console=console) as live:
 
             def _image_progress(phase, index, _total_count, spec):
-                label = f"{spec.name} ({spec.image})"
                 if phase == "start":
-                    progress.start(index, label)
+                    image_states[spec.name] = "pulling"
                 else:
-                    progress.advance()
+                    image_states[spec.name] = "done"
+                live.update(_make_table())
 
             manager.pull_images(specs, progress_callback=_image_progress)
 
