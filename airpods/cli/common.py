@@ -8,7 +8,12 @@ from airpods import __version__, podman
 from airpods.config import REGISTRY
 from airpods.configuration import get_config
 from airpods.logging import console
-from airpods.services import ServiceManager, ServiceSpec, UnknownServiceError, VolumeEnsureResult
+from airpods.services import (
+    ServiceManager,
+    ServiceSpec,
+    UnknownServiceError,
+    VolumeEnsureResult,
+)
 
 HELP_OPTION_NAMES = ("-h", "--help")
 COMMAND_CONTEXT = {"help_option_names": []}

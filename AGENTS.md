@@ -54,6 +54,8 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 - Integration (later): optional Podman-in-Podman smoke tests; GPU checks skipped when unavailable.
 
 ## Development Workflow
-- Run `uv run pytest` to execute test suite.
-- Format code before commits to maintain consistent style.
+- The CI workflow under `.github/workflows/test.yml` now has a `test` job that pins `ubuntu-24.04`, iterates over Python `3.10`‑`3.13`, installs/uses each interpreter via `uv python`, syncs dev/extras, runs `uv run pytest --cov=airpods --cov-report=term-missing --cov-report=xml`, and publishes Codecov only from the 3.13 row.
+- The paired `lint` job also targets `ubuntu-24.04`, installs UV, and validates that `python3 -m compileall airpods` can compile every module in the tree.
+- Run `uv run pytest` locally when making changes and keep formatting consistency with `uv format`.
+- Install `pre-commit` (part of the `dev` extras) and call `pre-commit run --all-files` before finishing your work; the hook runs `uv format`, Prettier checks on YAML/TOML/Markdown, the full pytest suite with coverage, and `python3 -m compileall airpods`, mirroring the CI jobs.
 - Commit messages use lowercase prefixes such as `docs:`, `refactor:`, `feat:`, `fix:`, or `chore:` followed by a concise summary.

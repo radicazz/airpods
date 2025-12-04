@@ -48,6 +48,10 @@ airpods stop
 
 Feel free to run `airpods --help` to see a full list of available commands.
 
+## Development
+
+After installing the editable package with `uv venv` / `uv pip install -e . '.[dev]'`, run `pre-commit install` so your local commits run the same checks as CI. `pre-commit run --all-files` executes the `uv format` pass, Prettier-based YAML/TOML/Markdown validation, the `uv run pytest --cov=airpods` suite, and `python3 -m compileall airpods`. You can still invoke `uv format` and `uv run pytest` directly when experimenting between commits; the hook is just the automatable shortcut that mirrors `.github/workflows/test.yml`.
+
 ## License
 
 Check out [LICENSE](./LICENSE) for more details.

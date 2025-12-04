@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        name: Prettier (Markdown/YAML/TOML)
+        files: '\\.(md|ya?ml|toml)$'
+        args: ['--check']
+  - repo: local
+    hooks:
+      - id: uv-format
+        name: Run uv format
+        entry: uv format
+        language: system
+        pass_filenames: false
+      - id: uv-test-suite
+        name: Run uv pytest suite
+        entry: uv run pytest --cov=airpods --cov-report=term-missing --cov-report=xml --maxfail=1
+        language: system
+        pass_filenames: false
+      - id: compileall-check
+        name: Compile the package tree
+        entry: python3 -m compileall airpods
+        language: system
+        pass_filenames: false

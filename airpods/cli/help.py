@@ -263,7 +263,9 @@ def _render_help_panel(renderables: list) -> None:
 def _command_description(command: click.Command | None) -> str:
     if command is None:
         return ""
-    text = (getattr(command, "help", None) or getattr(command, "short_help", None) or "").strip()
+    text = (
+        getattr(command, "help", None) or getattr(command, "short_help", None) or ""
+    ).strip()
     if text:
         return text
     callback = getattr(command, "callback", None)

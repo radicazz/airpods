@@ -40,7 +40,9 @@ from ..type_defs import CommandMap
 
 
 def register(app: typer.Typer) -> CommandMap:
-    config_app = typer.Typer(help="Manage airpods configuration.", context_settings=COMMAND_CONTEXT)
+    config_app = typer.Typer(
+        help="Manage airpods configuration.", context_settings=COMMAND_CONTEXT
+    )
 
     @config_app.callback(invoke_without_command=True)
     def _config_root(

@@ -3,9 +3,6 @@ private/
 config.toml
 .coverage
 
-# Uvicorn
-uv.lock
-
 # Byte-compiled / cache
 __pycache__/
 *.py[cod]
@@ -21,6 +18,8 @@ venv/
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+coverage.xml
+htmlcov/
 
 # Editors
 .DS_Store
@@ -34,6 +33,5 @@ build/
 
 # Podman / containers
 podman-machine-default*
-uv.lock
 volumes/
 configs/

@@ -12,9 +12,7 @@ def test_status_watch_handles_interrupt(mock_resolve, mock_ensure, mock_render, 
     mock_resolve.return_value = [MagicMock()]
     mock_render.side_effect = [None]
 
-    with patch(
-        "airpods.cli.commands.status.time.sleep", side_effect=KeyboardInterrupt
-    ):
+    with patch("airpods.cli.commands.status.time.sleep", side_effect=KeyboardInterrupt):
         result = runner.invoke(app, ["status", "--watch", "0.1"])
 
     assert result.exit_code == 0
