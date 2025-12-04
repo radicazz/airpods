@@ -1,4 +1,4 @@
-# Configuration Management
+# docs/commands/config
 
 The `airpods config` command manages your airpods configuration file.
 
@@ -104,6 +104,14 @@ network_name = "airpods_network"
 gpu_device_flag = "auto"
 restart_policy = "unless-stopped"
 
+[runtime.network]
+driver = "bridge"
+subnet = "10.89.0.0/16"  # optional custom subnet
+gateway = "10.89.0.1"    # optional custom gateway
+dns_servers = ["8.8.8.8", "1.1.1.1"]  # optional custom DNS
+ipv6 = false
+internal = false
+
 [cli]
 stop_timeout = 10
 log_lines = 200
@@ -121,6 +129,7 @@ enabled = true
 image = "docker.io/ollama/ollama:latest"
 pod = "ollama"
 container = "ollama-0"
+network_aliases = ["ollama"]  # accessible at ollama:11434
 needs_webui_secret = false
 
 [[services.ollama.ports]]
@@ -140,11 +149,37 @@ OLLAMA_ORIGINS = "*"
 OLLAMA_HOST = "0.0.0.0"
 ```
 
+## Network Configuration
+
+Services can use network aliases for cleaner inter-service communication:
+
+```toml
+[services.ollama]
+network_aliases = ["ollama"]
+
+[services.open-webui.env]
+OLLAMA_BASE_URL = "http://ollama:11434"  # clean vs {{runtime.host_gateway}}:{{...}}
+```
+
+**Network options** (`runtime.network`):
+- `driver`: Network driver (default: `"bridge"`)
+- `subnet`: Custom subnet in CIDR format (e.g., `"10.89.0.0/16"`)
+- `gateway`: Custom gateway IP
+- `dns_servers`: List of custom DNS servers
+- `ipv6`: Enable IPv6 networking
+- `internal`: Restrict external network access
+
+**Connection methods:**
+- Host port: `http://localhost:11434` (from host machine)
+- Network alias: `http://ollama:11434` (from containers, recommended)
+- Host gateway: `http://host.containers.internal:11434` (from containers)
+
 ## Tips
 
 - Use `airpods config validate` after manual edits
 - The `needs_webui_secret` flag automatically injects the webui secret
 - GPU detection is automatic; override with `gpu.force_cpu = true`
+- Network aliases simplify service URLs and improve performance
 - All changes are validated before saving
 
 ## Runtime Support

@@ -50,6 +50,7 @@ class ServiceSpec:
     env: Dict[str, str] = field(default_factory=dict)
     env_factory: Optional[Callable[[], Dict[str, str]]] = None
     volumes: List[VolumeMount] = field(default_factory=list)
+    network_aliases: List[str] = field(default_factory=list)
     needs_gpu: bool = False
     health_path: Optional[str] = None
 
@@ -127,6 +128,12 @@ class ServiceManager:
         runtime: ContainerRuntime,
         *,
         network_name: str = "airpods_network",
+        network_driver: str = "bridge",
+        network_subnet: str | None = None,
+        network_gateway: str | None = None,
+        network_dns_servers: list[str] | None = None,
+        network_ipv6: bool = False,
+        network_internal: bool = False,
         restart_policy: str = "unless-stopped",
         gpu_device_flag: str | None = None,
         required_dependencies: Optional[Sequence[str]] = None,
@@ -135,6 +142,12 @@ class ServiceManager:
         self.registry = registry
         self.runtime = runtime
         self.network_name = network_name
+        self.network_driver = network_driver
+        self.network_subnet = network_subnet
+        self.network_gateway = network_gateway
+        self.network_dns_servers = network_dns_servers or []
+        self.network_ipv6 = network_ipv6
+        self.network_internal = network_internal
         self.restart_policy = restart_policy
         self.gpu_device_flag = gpu_device_flag
         self.required_dependencies = list(
@@ -170,7 +183,15 @@ class ServiceManager:
     # ----------------------------------------------------------------------------------
     def ensure_network(self) -> bool:
         """Create the shared pod network if it doesn't exist."""
-        return self.runtime.ensure_network(self.network_name)
+        return self.runtime.ensure_network(
+            self.network_name,
+            driver=self.network_driver,
+            subnet=self.network_subnet,
+            gateway=self.network_gateway,
+            dns_servers=self.network_dns_servers,
+            ipv6=self.network_ipv6,
+            internal=self.network_internal,
+        )
 
     def ensure_volumes(self, specs: Iterable[ServiceSpec]) -> List[VolumeEnsureResult]:
         """Create all volumes required by the given service specs."""
@@ -233,6 +254,7 @@ class ServiceManager:
             image=spec.image,
             env=spec.runtime_env(),
             volumes=[mount.as_tuple() for mount in spec.volumes],
+            network_aliases=spec.network_aliases,
             gpu=spec.needs_gpu and gpu_available and not force_cpu,
             restart_policy=self.restart_policy,
             gpu_device_flag=self.gpu_device_flag,

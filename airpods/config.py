@@ -27,6 +27,7 @@ def _service_spec_from_config(name: str, service: ServiceConfig) -> ServiceSpec:
         env=dict(service.env),
         env_factory=env_factory,
         volumes=volumes,
+        network_aliases=list(service.network_aliases),
         needs_gpu=service.gpu.enabled,
         health_path=service.health.path,
     )

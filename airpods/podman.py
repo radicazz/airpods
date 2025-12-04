@@ -67,11 +67,34 @@ def network_exists(name: str) -> bool:
         return False
 
 
-def ensure_network(name: str) -> bool:
+def ensure_network(
+    name: str,
+    *,
+    driver: str = "bridge",
+    subnet: str | None = None,
+    gateway: str | None = None,
+    dns_servers: list[str] | None = None,
+    ipv6: bool = False,
+    internal: bool = False,
+) -> bool:
     if network_exists(name):
         return False
+    args = ["network", "create"]
+    args.extend(["--driver", driver])
+    if subnet:
+        args.extend(["--subnet", subnet])
+    if gateway:
+        args.extend(["--gateway", gateway])
+    if dns_servers:
+        for dns in dns_servers:
+            args.extend(["--dns", dns])
+    if ipv6:
+        args.append("--ipv6")
+    if internal:
+        args.append("--internal")
+    args.append(name)
     try:
-        _run(["network", "create", name], capture=False)
+        _run(args, capture=False)
     except subprocess.CalledProcessError as exc:
         detail = _format_exc_output(exc)
         msg = f"failed to create network {name}"
@@ -134,6 +157,7 @@ def run_container(
     image: str,
     env: Dict[str, str],
     volumes: Iterable[tuple[str, str]],
+    network_aliases: List[str] | None = None,
     gpu: bool = False,
     restart_policy: str = "unless-stopped",
     gpu_device_flag: Optional[str] = None,
@@ -150,6 +174,9 @@ def run_container(
         "--restart",
         restart_policy,
     ]
+    if network_aliases:
+        for alias in network_aliases:
+            args.extend(["--network-alias", alias])
     for key, val in env.items():
         args.extend(["-e", f"{key}={val}"])
     for volume_name, dest in volumes:

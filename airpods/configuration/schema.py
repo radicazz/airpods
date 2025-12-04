@@ -11,10 +11,35 @@ class MetaConfig(BaseModel):
     version: str = "1.0"
 
 
+class NetworkConfig(BaseModel):
+    driver: str = "bridge"
+    subnet: Optional[str] = None
+    gateway: Optional[str] = None
+    dns_servers: List[str] = Field(default_factory=list)
+    ipv6: bool = False
+    internal: bool = False
+
+    @field_validator("subnet")
+    @classmethod
+    def validate_subnet(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        import ipaddress
+
+        try:
+            ipaddress.ip_network(value, strict=False)
+        except ValueError as exc:
+            raise ValueError(
+                "Subnet must be in CIDR format (e.g., '10.89.0.0/16')"
+            ) from exc
+        return value
+
+
 class RuntimeConfig(BaseModel):
     prefer: Literal["auto", "podman", "docker"] = "auto"
     host_gateway: str = "auto"
     network_name: str = "airpods_network"
+    network: NetworkConfig = Field(default_factory=NetworkConfig)
     gpu_device_flag: str = "auto"
     restart_policy: Literal["no", "on-failure", "always", "unless-stopped"] = (
         "unless-stopped"
@@ -108,6 +133,7 @@ class ServiceConfig(BaseModel):
     image: str
     pod: str
     container: str
+    network_aliases: List[str] = Field(default_factory=list)
     ports: List[PortMapping] = Field(default_factory=list)
     volumes: Dict[str, VolumeMount] = Field(default_factory=dict)
     gpu: GPUConfig = Field(default_factory=GPUConfig)

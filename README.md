@@ -8,6 +8,7 @@ User-friendly CLI for orchestrating local AI services with ease.
 
 - One-command setup and start: `uv tool install --from . airpods` then `airpods init` / `airpods start`.
 - GPU-aware: detect NVIDIA GPUs and attach to pods when available; gracefully fall back to CPU.
+- Advanced networking: custom DNS names, network aliases, subnets, and DNS servers for flexible service discovery.
 - Opinionated but extensible: defaults for ports/volumes/images, easy to extend with future services like ComfyUI.
 - Helpful output: unified Rich/Typer experience with consistent tables, panels, and remediation hints across every command.
 - Self-service diagnostics: `airpods doctor` audits your environment without touching pods or volumes.
@@ -49,10 +50,6 @@ airpods stop
 ```
 
 Feel free to run `airpods --help` to see a full list of available commands.
-
-## Development
-
-After installing the editable package with `uv venv` / `uv pip install -e . '.[dev]'`, run `pre-commit install` so your local commits run the same checks as CI. `pre-commit run --all-files` executes the `uv format` pass, Prettier-based YAML/TOML/Markdown validation, the `uv run pytest --cov=airpods` suite, and `python3 -m compileall airpods`. You can still invoke `uv format` and `uv run pytest` directly when experimenting between commits; the hook is just the automatable shortcut that mirrors `.github/workflows/test.yml`.
 
 ## License
 

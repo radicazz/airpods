@@ -10,6 +10,12 @@ DEFAULT_CONFIG_DICT = {
         "prefer": "auto",
         "host_gateway": "auto",
         "network_name": "airpods_network",
+        "network": {
+            "driver": "bridge",
+            "dns_servers": [],
+            "ipv6": False,
+            "internal": False,
+        },
         "gpu_device_flag": "auto",
         "restart_policy": "unless-stopped",
     },
@@ -31,6 +37,7 @@ DEFAULT_CONFIG_DICT = {
             "image": "docker.io/ollama/ollama:latest",
             "pod": "ollama",
             "container": "ollama-0",
+            "network_aliases": ["ollama"],
             "ports": [{"host": 11434, "container": 11434}],
             "volumes": {
                 "data": {
@@ -52,6 +59,7 @@ DEFAULT_CONFIG_DICT = {
             "image": "ghcr.io/open-webui/open-webui:latest",
             "pod": "open-webui",
             "container": "open-webui-0",
+            "network_aliases": ["webui", "open-webui"],
             "ports": [{"host": 3000, "container": 8080}],
             "volumes": {
                 "data": {
@@ -72,6 +80,7 @@ DEFAULT_CONFIG_DICT = {
             "image": "ghcr.io/comfyanonymous/comfyui:latest",
             "pod": "comfyui",
             "container": "comfyui-0",
+            "network_aliases": ["comfyui"],
             "ports": [{"host": 7860, "container": 7860}],
             "volumes": {
                 "models": {

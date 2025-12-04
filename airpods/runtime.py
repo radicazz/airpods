@@ -12,7 +12,17 @@ class ContainerRuntimeError(RuntimeError):
 class ContainerRuntime(Protocol):
     """Abstract interface for container runtime operations."""
 
-    def ensure_network(self, name: str) -> bool:
+    def ensure_network(
+        self,
+        name: str,
+        *,
+        driver: str = "bridge",
+        subnet: str | None = None,
+        gateway: str | None = None,
+        dns_servers: list[str] | None = None,
+        ipv6: bool = False,
+        internal: bool = False,
+    ) -> bool:
         """Create a network if it doesn't exist.
 
         Returns True if the network was created, False if it already existed.
@@ -47,6 +57,7 @@ class ContainerRuntime(Protocol):
         image: str,
         env: Dict[str, str],
         volumes: Iterable[tuple[str, str]],
+        network_aliases: List[str] | None = None,
         gpu: bool = False,
         restart_policy: str = "unless-stopped",
         gpu_device_flag: Optional[str] = None,
@@ -99,9 +110,27 @@ class ContainerRuntime(Protocol):
 class PodmanRuntime:
     """Podman implementation of the container runtime interface."""
 
-    def ensure_network(self, name: str) -> bool:
+    def ensure_network(
+        self,
+        name: str,
+        *,
+        driver: str = "bridge",
+        subnet: str | None = None,
+        gateway: str | None = None,
+        dns_servers: list[str] | None = None,
+        ipv6: bool = False,
+        internal: bool = False,
+    ) -> bool:
         try:
-            return podman.ensure_network(name)
+            return podman.ensure_network(
+                name,
+                driver=driver,
+                subnet=subnet,
+                gateway=gateway,
+                dns_servers=dns_servers,
+                ipv6=ipv6,
+                internal=internal,
+            )
         except podman.PodmanError as exc:
             raise ContainerRuntimeError(str(exc)) from exc
 
@@ -133,6 +162,7 @@ class PodmanRuntime:
         image: str,
         env: Dict[str, str],
         volumes: Iterable[tuple[str, str]],
+        network_aliases: List[str] | None = None,
         gpu: bool = False,
         restart_policy: str = "unless-stopped",
         gpu_device_flag: Optional[str] = None,
@@ -144,6 +174,7 @@ class PodmanRuntime:
                 image=image,
                 env=env,
                 volumes=volumes,
+                network_aliases=network_aliases,
                 gpu=gpu,
                 restart_policy=restart_policy,
                 gpu_device_flag=gpu_device_flag,
