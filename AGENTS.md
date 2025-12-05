@@ -10,6 +10,16 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 - `status [service...]`: Compact Rich table (Service / Status / Info) summarizing HTTP health plus friendly URLs for running pods, or pod status + port summaries for stopped ones; redundant columns (pod name, uptime, counts) were removed for readability. Exposed aliases: `ps`.
 - `logs [service...]`: Tail logs for specified services or all; supports follow/since/lines.
 - `doctor`: Re-run checks without creating resources; surfaces remediation hints without touching pods/volumes.
+- `clean`: Remove volumes, images, configs, and user data created by airpods. Offers granular control via flags:
+  - `--all/-a`: Remove everything (pods, volumes, images, network, configs)
+  - `--pods/-p`: Stop and remove all pods and containers
+  - `--volumes/-v`: Remove Podman volumes and bind mount directories
+  - `--images/-i`: Remove pulled container images
+  - `--network/-n`: Remove the airpods network
+  - `--configs/-c`: Remove config files (config.toml, webui_secret)
+  - `--force/-f`: Skip confirmation prompts
+  - `--dry-run`: Show what would be deleted without deleting
+  - `--backup-config`: Backup config.toml before deletion (default: enabled)
 - `config`: Manage configuration with subcommands:
   - `init`: Create default config file at `$AIRPODS_HOME/configs/config.toml`
   - `show`: Display current configuration (TOML or JSON format)
@@ -26,7 +36,7 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
   - `airpods/cli/common.py` – shared constants, service manager, and Podman/dependency helpers.
   - `airpods/cli/help.py` – Rich-powered help/alias rendering tables used by the root callback.
   - `airpods/cli/status_view.py` – status table + health probing utilities.
-  - `airpods/cli/commands/` – individual command modules (`doctor`, `start`, `stop`, `status`, `logs`, `version`, `config`) each registering via `commands.__init__.register`.
+  - `airpods/cli/commands/` – individual command modules (`doctor`, `start`, `stop`, `status`, `logs`, `version`, `config`, `clean`) each registering via `commands.__init__.register`.
   - `airpods/cli/type_defs.py` – shared Typer command mapping type alias.
 - Configuration system:
   - `airpods/configuration/` – Pydantic-based config schema, loader, template resolver, and error types.

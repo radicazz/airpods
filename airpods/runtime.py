@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Protocol
+from typing import Dict, Iterable, List, Optional, Protocol
 
 from airpods import podman
 
@@ -34,6 +34,10 @@ class ContainerRuntime(Protocol):
 
         Returns True if the volume was created, False if it already existed.
         """
+        ...
+
+    def network_exists(self, name: str) -> bool:
+        """Check if a network exists."""
         ...
 
     def pull_image(self, image: str) -> None:
@@ -110,6 +114,22 @@ class ContainerRuntime(Protocol):
         """Get the size of an image in human-readable format."""
         ...
 
+    def list_volumes(self) -> List[str]:
+        """List all volumes matching airpods pattern."""
+        ...
+
+    def remove_volume(self, name: str) -> None:
+        """Remove a volume."""
+        ...
+
+    def remove_image(self, image: str) -> None:
+        """Remove an image."""
+        ...
+
+    def remove_network(self, name: str) -> None:
+        """Remove a network."""
+        ...
+
 
 class PodmanRuntime:
     """Podman implementation of the container runtime interface."""
@@ -143,6 +163,9 @@ class PodmanRuntime:
             return podman.ensure_volume(name)
         except podman.PodmanError as exc:
             raise ContainerRuntimeError(str(exc)) from exc
+
+    def network_exists(self, name: str) -> bool:
+        return podman.network_exists(name)
 
     def pull_image(self, image: str) -> None:
         try:
@@ -222,6 +245,27 @@ class PodmanRuntime:
 
     def image_size(self, image: str) -> Optional[str]:
         return podman.image_size(image)
+
+    def list_volumes(self) -> List[str]:
+        return podman.list_volumes()
+
+    def remove_volume(self, name: str) -> None:
+        try:
+            podman.remove_volume(name)
+        except podman.PodmanError as exc:
+            raise ContainerRuntimeError(str(exc)) from exc
+
+    def remove_image(self, image: str) -> None:
+        try:
+            podman.remove_image(image)
+        except podman.PodmanError as exc:
+            raise ContainerRuntimeError(str(exc)) from exc
+
+    def remove_network(self, name: str) -> None:
+        try:
+            podman.remove_network(name)
+        except podman.PodmanError as exc:
+            raise ContainerRuntimeError(str(exc)) from exc
 
 
 def get_runtime(prefer: str | None) -> ContainerRuntime:

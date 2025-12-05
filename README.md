@@ -49,6 +49,30 @@ airpods status
 
 # Stop everything when you're done
 airpods stop
+
+# Clean up when you're completely done (removes volumes, images, configs)
+airpods clean --all
+```
+
+### Cleanup Options
+
+The `clean` command offers granular control over what gets removed:
+
+```bash
+# Preview what would be deleted
+airpods clean --all --dry-run
+
+# Remove only volumes and bind mounts (keeps images and configs)
+airpods clean --volumes
+
+# Remove only images (free up disk space, ~10-20GB typically)
+airpods clean --images
+
+# Remove everything except configs (useful for fresh start with same settings)
+airpods clean --pods --volumes --images --network
+
+# Nuclear option: remove everything and skip confirmations
+airpods clean --all --force
 ```
 
 Feel free to run `airpods --help` to see a full list of available commands.

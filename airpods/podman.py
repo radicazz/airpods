@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import shlex
 import subprocess
-from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 
 from .logging import console
@@ -57,6 +56,31 @@ def ensure_volume(name: str) -> bool:
             msg = f"{msg}: {detail}"
         raise PodmanError(msg) from exc
     return True
+
+
+def list_volumes() -> List[str]:
+    """List all Podman volumes matching airpods pattern."""
+    try:
+        proc = _run(["volume", "ls", "--format", "{{.Name}}"])
+        return [
+            line.strip()
+            for line in proc.stdout.splitlines()
+            if line.strip().startswith("airpods_")
+        ]
+    except subprocess.CalledProcessError:
+        return []
+
+
+def remove_volume(name: str) -> None:
+    """Remove a Podman volume by name."""
+    try:
+        _run(["volume", "rm", "--force", name], capture=False)
+    except subprocess.CalledProcessError as exc:
+        detail = _format_exc_output(exc)
+        msg = f"failed to remove volume {name}"
+        if detail:
+            msg = f"{msg}: {detail}"
+        raise PodmanError(msg) from exc
 
 
 def network_exists(name: str) -> bool:
@@ -257,6 +281,28 @@ def remove_pod(name: str) -> None:
     except subprocess.CalledProcessError as exc:
         detail = _format_exc_output(exc)
         msg = f"failed to remove pod {name}"
+        if detail:
+            msg = f"{msg}: {detail}"
+        raise PodmanError(msg) from exc
+
+
+def remove_image(image: str) -> None:
+    """Remove a container image."""
+    try:
+        _run(["image", "rm", "--force", image], capture=False)
+    except subprocess.CalledProcessError as exc:
+        stdout = _format_exc_output(exc)
+        if "image not known" not in stdout.lower():
+            raise PodmanError(f"failed to remove image {image}: {stdout}") from exc
+
+
+def remove_network(name: str) -> None:
+    """Remove a Podman network."""
+    try:
+        _run(["network", "rm", "--force", name], capture=False)
+    except subprocess.CalledProcessError as exc:
+        detail = _format_exc_output(exc)
+        msg = f"failed to remove network {name}"
         if detail:
             msg = f"{msg}: {detail}"
         raise PodmanError(msg) from exc
