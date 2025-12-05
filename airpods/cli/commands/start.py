@@ -148,6 +148,18 @@ def register(app: typer.Typer) -> CommandMap:
             volume_results = manager.ensure_volumes(specs_to_start)
         print_volume_status(volume_results)
 
+        # Sync Open WebUI plugins if webui is being started
+        from airpods import plugins
+
+        webui_specs = [s for s in specs_to_start if s.name == "open-webui"]
+        if webui_specs:
+            with status_spinner("Syncing Open WebUI plugins"):
+                synced = plugins.sync_plugins()
+            if synced > 0:
+                console.print(f"[ok]✓[/] Synced {synced} plugin(s)")
+            else:
+                console.print("[info]Plugins already up-to-date[/]")
+
         # Initialize service states for the unified table
         service_states: dict[str, str] = {
             spec.name: "pulling" for spec in specs_to_start

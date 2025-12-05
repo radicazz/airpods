@@ -65,7 +65,11 @@ DEFAULT_CONFIG_DICT = {
                 "data": {
                     "source": "bind://airpods_webui_data",
                     "target": "/app/backend/data",
-                }
+                },
+                "plugins": {
+                    "source": "bind://webui_plugins",
+                    "target": "/app/backend/data/functions",
+                },
             },
             "gpu": {"enabled": False, "force_cpu": False},
             "health": {"path": "/", "expected_status": [200, 399]},
