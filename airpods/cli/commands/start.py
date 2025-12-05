@@ -148,6 +148,18 @@ def register(app: typer.Typer) -> CommandMap:
             volume_results = manager.ensure_volumes(specs_to_start)
         print_volume_status(volume_results)
 
+        # Sync Open WebUI plugins if webui is being started
+        from airpods import plugins
+
+        webui_specs = [s for s in specs_to_start if s.name == "open-webui"]
+        if webui_specs:
+            with status_spinner("Syncing Open WebUI plugins"):
+                synced = plugins.sync_plugins()
+            if synced > 0:
+                console.print(f"[ok]✓[/] Synced {synced} plugin(s)")
+            else:
+                console.print("[info]Plugins already up-to-date[/]")
+
         # Initialize service states for the unified table
         service_states: dict[str, str] = {
             spec.name: "pulling" for spec in specs_to_start
@@ -311,6 +323,29 @@ def register(app: typer.Typer) -> CommandMap:
                 f"\n[warn]Timed out services: {', '.join(timeout_services)}. "
                 "Services may still be starting. Check with 'airpods status'[/]"
             )
+
+        # Auto-import plugins into Open WebUI if service is healthy
+        if webui_specs and service_states.get("open-webui") == "healthy":
+            with status_spinner("Auto-importing plugins into Open WebUI"):
+                try:
+                    plugins_dir = plugins.get_plugins_target_dir()
+                    container_name = webui_specs[0].container
+                    imported = plugins.import_plugins_to_webui(
+                        plugins_dir, container_name=container_name
+                    )
+                    if imported > 0:
+                        console.print(
+                            f"[ok]✓[/] Auto-imported {imported} plugin(s) into Open WebUI"
+                        )
+                    else:
+                        console.print(
+                            "[info]No new plugins to import (may already exist)[/]"
+                        )
+                except Exception as e:
+                    console.print(
+                        f"[warn]Plugin auto-import failed: {e}. "
+                        "Plugins are synced to filesystem and can be imported manually via UI.[/]"
+                    )
 
     return {"start": start}
 

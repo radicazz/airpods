@@ -65,12 +65,17 @@ DEFAULT_CONFIG_DICT = {
                 "data": {
                     "source": "bind://airpods_webui_data",
                     "target": "/app/backend/data",
-                }
+                },
+                "plugins": {
+                    "source": "bind://webui_plugins",
+                    "target": "/app/backend/data/functions",
+                },
             },
             "gpu": {"enabled": False, "force_cpu": False},
             "health": {"path": "/", "expected_status": [200, 399]},
             "env": {
-                "OLLAMA_BASE_URL": "http://ollama:{{services.ollama.ports.0.container}}"
+                "OLLAMA_BASE_URL": "http://ollama:{{services.ollama.ports.0.container}}",
+                "ENABLE_COMMUNITY_SHARING": "True",
             },
             "resources": {},
             "needs_webui_secret": True,

@@ -12,6 +12,7 @@ User-friendly CLI for orchestrating local AI services with ease.
 - Opinionated but extensible: defaults for ports/volumes/images, easy to extend with future services like ComfyUI.
 - Helpful output: unified Rich/Typer experience with consistent tables, panels, and remediation hints across every command.
 - Self-service diagnostics: `airpods doctor` audits your environment without touching pods or volumes.
+- **Auto-import plugins**: Bundled Open WebUI plugins are automatically synced to the filesystem and imported into the database when starting the `open-webui` service.
 
 ## Getting Started
 
