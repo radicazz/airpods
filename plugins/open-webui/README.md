@@ -1,20 +1,28 @@
-# Open WebUI Plugins for AirPods
+# Open WebUI Extensions for AirPods
 
-Auto-installed custom functions for Open WebUI. Automatically synced to the filesystem and imported into the database on `airpods start open-webui`.
+Auto-installed custom Tools, Functions, and Pipelines for Open WebUI. Automatically synced to the filesystem and imported into the database on `airpods start open-webui`.
 
-## Plugin Categories
+## Extension Types
 
-### 🔧 Basic Filters
-- **system_prompt_enforcer** - Enforce consistent system prompts
-- **profanity_filter** - Filter inappropriate language
-- **token_counter** - Track and limit token usage
-- **code_detector** - Detect programming languages in code blocks
+Open WebUI supports three types of extensions:
 
-### 🚀 Advanced Workflows
-- **vision_joycaption** - Add vision to non-vision models via JoyCaption API
-- **twitter_scraper** - Scrape Twitter/X via Nitter (no API required)
-- **web_researcher** - Auto web search for current information
-- **example_function** - Template for creating custom plugins
+- **Tools** - Extend LLM capabilities with real-time data access (weather, stocks, web search, etc.)
+- **Functions** - Enhance Open WebUI features (custom UI elements, response formatting, content filtering)
+- **Pipelines** - Advanced API workflows for heavy processing or request transformation
+
+## Available Extensions
+
+### Tools (Real-time Data Access)
+- **weather_tool** - Fetch real-time weather data for any location using wttr.in API
+
+### Functions (UI & Feature Enhancements)
+- **system_prompt_enforcer** - Enforce consistent system prompts across conversations
+- **code_detector** - Detect programming languages in code blocks and add helpful context
+- **token_counter** - Track and limit token usage with basic estimation
+- **markdown_enhancer_function** - Add custom UI elements (collapsible sections, info boxes, code metadata)
+
+### Pipelines (Advanced Processing)
+- **content_moderation_pipeline** - Filter toxic/harmful content and detect PII before/after LLM processing
 
 ## Auto-Installation
 
@@ -23,64 +31,86 @@ Plugins are automatically synced and imported when starting Open WebUI:
 ```bash
 airpods start open-webui
 # Output during startup:
-# ✓ Synced 8 plugin(s)
+# ✓ Synced 6 extension(s)
 # ... (service starts and becomes healthy) ...
-# ✓ Auto-imported 8 plugin(s) into Open WebUI
+# ✓ Auto-imported 6 extension(s) into Open WebUI
 ```
 
 The process:
-1. **Filesystem sync**: Plugin files are copied from `plugins/open-webui/` to `$AIRPODS_HOME/volumes/webui_plugins/`
+1. **Filesystem sync**: Extension files are copied from `plugins/open-webui/` to `$AIRPODS_HOME/volumes/webui_plugins/`
 2. **Container mount**: The `webui_plugins` directory is mounted to `/app/backend/data/functions` in the container
-3. **Database import**: Once Open WebUI is healthy, plugins are automatically imported into the database via the API
-4. **Ready to use**: Plugins appear in the Admin Panel → Functions, ready to enable and configure
+3. **Database import**: Once Open WebUI is healthy, extensions are automatically imported into the database via the API
+4. **Ready to use**: Extensions appear in the Admin Panel (Tools, Functions, or Pipelines sections), ready to enable and configure
 
 ## Usage
 
 1. Start: `airpods start open-webui`
 2. Open http://localhost:3000
-3. Go to **Admin Panel → Functions**
-4. Plugins are already imported—just enable and configure them
+3. Go to **Admin Panel** → **Tools** / **Functions** / **Pipelines** (depending on extension type)
+4. Extensions are already imported—just enable and configure them
 5. Adjust settings (valves) as needed
 
-## Advanced Plugin Examples
+## Extension Details
 
-### Vision via JoyCaption
+### Weather Tool
+Allows LLMs to fetch real-time weather information:
+- Uses free wttr.in API (no API key required)
+- Supports metric/imperial units
+- Returns temperature, conditions, humidity, wind, UV index, etc.
+- Example: LLM can respond to "What's the weather in London?" with live data
 
-Enables image understanding for models like llama3/mistral that lack native vision:
+### Markdown Enhancer Function
+Enhances AI responses with custom UI elements:
+- Adds metadata badges to code blocks (language, line count)
+- Auto-collapses long code blocks for readability
+- Converts `[INFO]`, `[WARNING]`, `[ERROR]` markers into styled boxes
+- Configurable via valves (enable/disable features, set collapse threshold)
 
-\`\`\`bash
-# Deploy JoyCaption (example)
-docker run -d --name joycaption -p 5000:5000 --gpus all fancyfeast/joycaption:latest
-\`\`\`
+### Content Moderation Pipeline
+Advanced safety layer for LLM interactions:
+- Filters harmful content patterns before sending to LLM
+- Detects and optionally redacts PII (emails, SSNs, credit cards, phone numbers)
+- Enforces message length limits
+- Configurable blocked patterns (regex)
+- Runs as pre/post-processing pipeline
 
-Then configure the valve in Open WebUI to point to \`http://joycaption:5000/caption\`.
+## Creating Custom Extensions
 
-### Twitter Scraper
+### Tool Template (Real-time Data Access)
 
-Scrapes tweets without Twitter API:
-
-**Trigger examples:**
-- "Show me @elonmusk's latest tweets"
-- "What's trending on Twitter about AI?"
-
-Uses Nitter (privacy-friendly frontend). Optionally self-host for reliability.
-
-### Web Researcher
-
-Auto-searches when queries need current info:
-
-**Trigger examples:**
-- "What is the latest news about GPT-5?"
-- "Current Bitcoin price"
-- "Recent quantum computing developments"
-
-## Creating Custom Plugins
-
-Template:
-
-\`\`\`python
+```python
 """
-title: My Plugin
+title: My Custom Tool
+author: you
+version: 0.1.0
+description: Tool description
+"""
+
+from pydantic import BaseModel, Field
+
+class Tools:
+    class Valves(BaseModel):
+        api_key: str = Field(default="", description="API key if needed")
+
+    def __init__(self):
+        self.valves = self.Valves()
+
+    def my_function(self, query: str) -> str:
+        """
+        Fetch data from external source.
+
+        :param query: Search query or location
+        :return: Formatted data as string
+        """
+        # Implement your data fetching logic
+        return f"Result for: {query}"
+```
+
+### Function Template (UI Enhancement)
+
+```python
+"""
+title: My Custom Function
 author: you
 version: 0.1.0
 """
@@ -102,15 +132,48 @@ class Filter:
     def outlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
         # Modify response after AI
         return body
-\`\`\`
+```
 
-Save in \`plugins/open-webui/\`, restart Open WebUI, enable in Admin Panel.
+### Pipeline Template (Advanced Processing)
+
+```python
+"""
+title: My Custom Pipeline
+author: you
+version: 0.1.0
+"""
+
+from typing import List, Dict, Any
+from pydantic import BaseModel, Field
+
+class Pipeline:
+    class Valves(BaseModel):
+        priority: int = Field(default=0)
+
+    def __init__(self):
+        self.valves = self.Valves()
+        self.name = "My Pipeline"
+
+    def pipe(
+        self, user_message: str, model_id: str, messages: List[Dict], body: Dict
+    ) -> Dict[str, Any]:
+        # Transform the request/response
+        return body
+
+    async def on_startup(self):
+        print("Pipeline loaded")
+
+    async def on_shutdown(self):
+        pass
+```
+
+Save in `plugins/open-webui/`, restart Open WebUI, enable in Admin Panel.
 
 ## Troubleshooting
 
-**Plugins not showing in Functions list:**
+**Extensions not showing in Admin Panel:**
 - The auto-import happens after the service becomes healthy
-- Check the startup output for "Auto-imported X plugin(s)" message
+- Check the startup output for "Auto-imported X extension(s)" message
 - If import failed, check `airpods logs open-webui` for errors
 - Verify files exist in `$AIRPODS_HOME/volumes/webui_plugins/`
 - Manual fallback: Use the Open WebUI UI to import from the filesystem
@@ -118,16 +181,20 @@ Save in \`plugins/open-webui/\`, restart Open WebUI, enable in Admin Panel.
 **Auto-import errors:**
 - Ensure the WebUI secret is valid (stored in `$AIRPODS_HOME/configs/webui_secret`)
 - Check network connectivity: `curl http://localhost:3000/api/config`
-- The plugins are still available in the container filesystem at `/app/backend/data/functions/` and can be imported manually through the UI
+- Extensions are still available in the container filesystem at `/app/backend/data/functions/` and can be imported manually through the UI
 
-**Vision/scraping not working:**
-- Check external service is running and accessible
-- Verify network connectivity in logs
-- Update valve URLs to match your setup
-
-**To manually re-import plugins:**
-1. Go to Admin Panel → Functions in Open WebUI
+**To manually import/re-import extensions:**
+1. Go to Admin Panel → Tools/Functions/Pipelines in Open WebUI
 2. Click "Import from Filesystem" or use the "+" button
-3. Select the plugin files from `/app/backend/data/functions/`
+3. Select the extension files from `/app/backend/data/functions/`
 
-See [Open WebUI Functions docs](https://docs.openwebui.com/features/plugin_system/) for more details.
+**Extension-specific issues:**
+- **Weather Tool**: Requires internet access from the container; check network connectivity
+- **Content Moderation Pipeline**: May need adjustment of blocked patterns for your use case
+- **Markdown Enhancer**: Works best with markdown-formatted responses
+
+## References
+
+- [Open WebUI Tools Documentation](https://docs.openwebui.com/features/plugin_system/)
+- [Open WebUI Functions Documentation](https://docs.openwebui.com/features/plugin_system/)
+- [Open WebUI Pipelines Documentation](https://docs.openwebui.com/features/plugin_system/)

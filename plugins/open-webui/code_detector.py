@@ -1,5 +1,5 @@
 """
-title: Code Block Detector
+title: Code Detector
 author: airpods
 author_url: https://github.com/radicazz/airpods
 version: 0.1.0
