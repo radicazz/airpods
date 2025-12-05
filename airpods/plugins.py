@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import shutil
+import subprocess
+import time
 from pathlib import Path
 
 from airpods.logging import console
 from airpods.paths import detect_repo_root
 from airpods.state import volumes_dir
+
+WEBUI_DB_PATH = "/app/backend/data/webui.db"
 
 
 def get_plugins_source_dir() -> Path:
@@ -103,3 +108,97 @@ def list_installed_plugins() -> list[str]:
         for p in target_dir.glob("*.py")
         if p.name != "__init__.py" and not p.name.startswith("_")
     ]
+
+
+def import_plugins_to_webui(
+    plugins_dir: Path,
+    admin_user_id: str = "system",
+    container_name: str = "open-webui-0",
+) -> int:
+    """Import plugins directly into Open WebUI database via SQL.
+
+    This bypasses the API entirely and inserts functions directly into
+    the SQLite database using podman exec.
+
+    Args:
+        plugins_dir: Directory containing plugin .py files
+        admin_user_id: User ID to assign as owner (default: "system")
+        container_name: Name of the Open WebUI container
+
+    Returns:
+        Number of plugins successfully imported
+    """
+    if not plugins_dir.exists():
+        console.print(f"[warn]Plugins directory not found: {plugins_dir}[/]")
+        return 0
+
+    imported = 0
+    plugin_files = [p for p in plugins_dir.glob("*.py") if p.name != "__init__.py"]
+    timestamp = int(time.time())
+
+    for plugin_file in plugin_files:
+        try:
+            function_id = plugin_file.stem
+            content = plugin_file.read_text(encoding="utf-8")
+
+            # Escape single quotes for SQL
+            content_escaped = content.replace("'", "''")
+
+            # Create meta JSON
+            meta = {
+                "description": f"Auto-imported from {plugin_file.name}",
+                "manifest": {},
+            }
+            meta_json = json.dumps(meta).replace("'", "''")
+
+            # Build SQL INSERT with ON CONFLICT (upsert)
+            sql = f"""
+            INSERT INTO function (
+                id, user_id, name, type, content, meta,
+                created_at, updated_at, is_active, is_global
+            ) VALUES (
+                '{function_id}',
+                '{admin_user_id}',
+                '{function_id.replace("_", " ").title()}',
+                'filter',
+                '{content_escaped}',
+                '{meta_json}',
+                {timestamp},
+                {timestamp},
+                1,
+                0
+            )
+            ON CONFLICT(id) DO UPDATE SET
+                content = excluded.content,
+                updated_at = excluded.updated_at;
+            """
+
+            # Execute via podman exec
+            cmd = [
+                "podman",
+                "exec",
+                container_name,
+                "python3",
+                "-c",
+                f"import sqlite3; "
+                f"conn = sqlite3.connect('{WEBUI_DB_PATH}'); "
+                f"cursor = conn.cursor(); "
+                f"cursor.execute({repr(sql)}); "
+                f"conn.commit(); "
+                f"print('Imported {function_id}:', cursor.rowcount); "
+                f"conn.close()",
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+
+            if result.returncode == 0 and "Imported" in result.stdout:
+                imported += 1
+            else:
+                console.print(
+                    f"[warn]Failed to import {function_id}: {result.stderr}[/]"
+                )
+
+        except Exception as e:
+            console.print(f"[error]Error importing {plugin_file.name}: {e}[/]")
+
+    return imported

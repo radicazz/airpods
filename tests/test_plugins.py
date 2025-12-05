@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from airpods import plugins
-from airpods import webui_db
 
 
 def test_sync_plugins_copies_and_prunes(
@@ -50,9 +49,11 @@ def test_import_functions_uses_container(
         captured["cmd"] = cmd
         return DummyResult()
 
-    monkeypatch.setattr(webui_db.subprocess, "run", fake_run)
+    import subprocess
 
-    imported = webui_db.import_functions_via_db(
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    imported = plugins.import_plugins_to_webui(
         plugin_dir, admin_user_id="owner", container_name="custom-container"
     )
 

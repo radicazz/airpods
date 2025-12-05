@@ -326,13 +326,11 @@ def register(app: typer.Typer) -> CommandMap:
 
         # Auto-import plugins into Open WebUI if service is healthy
         if webui_specs and service_states.get("open-webui") == "healthy":
-            from airpods import webui_db
-
             with status_spinner("Auto-importing plugins into Open WebUI"):
                 try:
                     plugins_dir = plugins.get_plugins_target_dir()
                     container_name = webui_specs[0].container
-                    imported = webui_db.import_functions_via_db(
+                    imported = plugins.import_plugins_to_webui(
                         plugins_dir, container_name=container_name
                     )
                     if imported > 0:
