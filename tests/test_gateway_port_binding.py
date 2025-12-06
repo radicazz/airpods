@@ -60,22 +60,55 @@ def test_gateway_has_ports_when_enabled():
 
 
 def test_other_services_unaffected_by_gateway():
-    """Test other services' ports are unaffected by gateway setting."""
+    """Test ComfyUI ports are unaffected by gateway (Ollama hidden when gateway enabled)."""
     config_dict = DEFAULT_CONFIG_DICT.copy()
     config_dict["services"]["gateway"]["enabled"] = True
     config = AirpodsConfig.from_dict(config_dict)
     
     specs = _load_service_specs(config)
     
-    # Ollama should still have its ports
+    # Ollama should have NO ports when gateway enabled (hidden)
     ollama_specs = [s for s in specs if s.name == "ollama"]
     assert len(ollama_specs) == 1
-    assert ollama_specs[0].ports == [(11434, 11434)]
+    assert ollama_specs[0].ports == []
     
-    # ComfyUI should still have its ports
+    # ComfyUI should still have its ports (not yet protected)
     comfyui_specs = [s for s in specs if s.name == "comfyui"]
     assert len(comfyui_specs) == 1
     assert comfyui_specs[0].ports == [(8188, 8188)]
+
+
+def test_ollama_has_ports_when_gateway_disabled():
+    """Test Ollama has host port binding when gateway is disabled."""
+    config_dict = DEFAULT_CONFIG_DICT.copy()
+    config_dict["services"]["gateway"]["enabled"] = False
+    config = AirpodsConfig.from_dict(config_dict)
+    
+    specs = _load_service_specs(config)
+    ollama_specs = [s for s in specs if s.name == "ollama"]
+    
+    assert len(ollama_specs) == 1
+    ollama = ollama_specs[0]
+    
+    # Should have port binding (11434 -> 11434)
+    assert len(ollama.ports) == 1
+    assert ollama.ports[0] == (11434, 11434)
+
+
+def test_ollama_no_ports_when_gateway_enabled():
+    """Test Ollama has no host port binding when gateway is enabled."""
+    config_dict = DEFAULT_CONFIG_DICT.copy()
+    config_dict["services"]["gateway"]["enabled"] = True
+    config = AirpodsConfig.from_dict(config_dict)
+    
+    specs = _load_service_specs(config)
+    ollama_specs = [s for s in specs if s.name == "ollama"]
+    
+    assert len(ollama_specs) == 1
+    ollama = ollama_specs[0]
+    
+    # Should have NO port binding (internal-only)
+    assert ollama.ports == []
 
 
 def test_open_webui_retains_other_properties_when_gateway_enabled():

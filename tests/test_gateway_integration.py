@@ -130,7 +130,7 @@ def test_gateway_volumes_configuration():
     [
         ("gateway", True),
         ("open-webui", False),
-        ("ollama", True),
+        ("ollama", False),  # Ollama hidden when gateway enabled
         ("comfyui", True),
     ],
 )

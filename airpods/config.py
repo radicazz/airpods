@@ -77,9 +77,9 @@ def _load_service_specs(config: Optional[AirpodsConfig] = None) -> List[ServiceS
         
         spec = _service_spec_from_config(name, service)
         
-        # If gateway is enabled, remove Open WebUI's host port binding
-        # (make it internal-only on airpods_network)
-        if gateway_enabled and name == "open-webui":
+        # If gateway is enabled, remove host port bindings for internal services
+        # (make them internal-only on airpods_network)
+        if gateway_enabled and name in ("open-webui", "ollama"):
             spec = ServiceSpec(
                 name=spec.name,
                 pod=spec.pod,

@@ -67,9 +67,14 @@ Browser → Gateway (localhost:8080)
 | Service    | Gateway Disabled       | Gateway Enabled         |
 |------------|------------------------|-------------------------|
 | Open WebUI | `localhost:3000`       | Internal only           |
+| Ollama     | `localhost:11434`      | Internal only (via `/ollama/*`) |
 | Gateway    | N/A                    | `localhost:8080`        |
-| Ollama     | `localhost:11434`      | `localhost:11434`       |
 | ComfyUI    | `localhost:8188`       | `localhost:8188`        |
+
+**When gateway is enabled:**
+- Open WebUI accessible at `http://localhost:8080/` (requires login)
+- Ollama API accessible at `http://localhost:8080/ollama/*` (requires login)
+- ComfyUI remains directly accessible (will be protected in future release)
 
 ### Example Output
 
