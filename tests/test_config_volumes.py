@@ -15,7 +15,8 @@ def _fresh_spec(name: str):
     reload_config()
     import airpods.config as config_module
 
-    return config_module._service_spec_from_config(name, get_config().services[name])
+    config = get_config()
+    return config_module._service_spec_from_config(name, config.services[name], config)
 
 
 def _assert_under_volumes(path: Path, home: Path) -> None:

@@ -52,3 +52,45 @@ def detect_gpu() -> Tuple[bool, str]:
     if not gpu_names:
         return False, "no GPUs detected"
     return True, ", ".join(gpu_names)
+
+
+def detect_cuda_compute_capability() -> Tuple[bool, str, Optional[Tuple[int, int]]]:
+    """Detect NVIDIA GPU compute capability via nvidia-smi; fail softly.
+
+    Returns:
+        (has_gpu, gpu_name, compute_capability)
+
+        has_gpu: True if GPU detected and query succeeded
+        gpu_name: Name of the first GPU, or error message if failed
+        compute_capability: (major, minor) tuple like (7, 5) for compute 7.5, or None if failed
+    """
+    if shutil.which("nvidia-smi") is None:
+        return False, "nvidia-smi not found", None
+
+    # Query both name and compute capability
+    ok, output = _run_command(
+        ["nvidia-smi", "--query-gpu=name,compute_cap", "--format=csv,noheader,nounits"]
+    )
+    if not ok:
+        return False, "nvidia-smi failed", None
+
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        return False, "no GPUs detected", None
+
+    # Parse first GPU line: "NVIDIA GeForce GTX 1650, 7.5"
+    try:
+        gpu_name, compute_cap_str = lines[0].split(", ", 1)
+        gpu_name = gpu_name.strip()
+        compute_cap_str = compute_cap_str.strip()
+
+        # Parse compute capability like "7.5" into (7, 5)
+        major_str, minor_str = compute_cap_str.split(".", 1)
+        major = int(major_str)
+        minor = int(minor_str)
+
+        return True, gpu_name, (major, minor)
+    except (ValueError, IndexError) as exc:
+        # Fallback to just GPU name if compute capability parsing fails
+        gpu_name = lines[0].split(",")[0].strip() if "," in lines[0] else lines[0]
+        return False, f"{gpu_name} (compute capability parse failed: {exc})", None

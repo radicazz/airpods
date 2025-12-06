@@ -44,6 +44,7 @@ class RuntimeConfig(BaseModel):
     restart_policy: Literal["no", "on-failure", "always", "unless-stopped"] = (
         "unless-stopped"
     )
+    cuda_version: Literal["auto", "cu118", "cu126", "cu128", "cu130", "cpu"] = "auto"
 
 
 class CLIConfig(BaseModel):
@@ -141,6 +142,7 @@ class ServiceConfig(BaseModel):
     env: Dict[str, str] = Field(default_factory=dict)
     resources: ResourceLimits = Field(default_factory=ResourceLimits)
     needs_webui_secret: bool = False
+    cuda_override: Optional[str] = None
 
     model_config = ConfigDict(extra="ignore")
 

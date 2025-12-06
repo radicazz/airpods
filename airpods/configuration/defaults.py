@@ -18,6 +18,7 @@ DEFAULT_CONFIG_DICT = {
         },
         "gpu_device_flag": "auto",
         "restart_policy": "unless-stopped",
+        "cuda_version": "auto",
     },
     "cli": {
         "stop_timeout": 10,
