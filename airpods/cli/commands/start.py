@@ -12,7 +12,8 @@ from rich.table import Table
 
 from airpods import state, ui
 from airpods.logging import console, status_spinner
-from airpods.system import detect_gpu
+from airpods.system import detect_gpu, detect_cuda_compute_capability
+from airpods.cuda import select_cuda_version, get_cuda_info_display
 from airpods.services import ServiceSpec
 
 from ..common import (
@@ -138,6 +139,22 @@ def register(app: typer.Typer) -> CommandMap:
             console.print(f"GPU: [ok]enabled[/] ({gpu_detail})")
         else:
             console.print(f"GPU: [muted]not detected[/] ({gpu_detail})")
+
+        # Show CUDA detection info if ComfyUI is being started
+        comfyui_specs = [s for s in specs_to_start if s.name == "comfyui"]
+        if comfyui_specs:
+            has_gpu_cap, gpu_name_cap, compute_cap = detect_cuda_compute_capability()
+            if has_gpu_cap and compute_cap:
+                selected_cuda = select_cuda_version(compute_cap)
+                cuda_info = get_cuda_info_display(
+                    has_gpu_cap, gpu_name_cap, compute_cap, selected_cuda
+                )
+                console.print(f"CUDA: [ok]{cuda_info}[/]")
+            else:
+                cuda_info = get_cuda_info_display(
+                    has_gpu_cap, gpu_name_cap, compute_cap, "cu126"
+                )
+                console.print(f"CUDA: [muted]{cuda_info}[/]")
 
         # Only ensure network/volumes if we're actually starting something
         with status_spinner("Ensuring network"):

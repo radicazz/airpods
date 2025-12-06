@@ -6,6 +6,8 @@ import typer
 
 from airpods import ui
 from airpods.logging import console
+from airpods.system import detect_cuda_compute_capability
+from airpods.cuda import select_cuda_version, get_cuda_info_display
 
 from ..common import COMMAND_CONTEXT, DOCTOR_REMEDIATIONS, manager
 from ..help import command_help_option, maybe_show_command_help
@@ -23,6 +25,20 @@ def register(app: typer.Typer) -> CommandMap:
 
         report = manager.report_environment()
         ui.show_environment(report)
+
+        # Show CUDA detection info
+        has_gpu_cap, gpu_name_cap, compute_cap = detect_cuda_compute_capability()
+        if has_gpu_cap and compute_cap:
+            selected_cuda = select_cuda_version(compute_cap)
+            cuda_info = get_cuda_info_display(
+                has_gpu_cap, gpu_name_cap, compute_cap, selected_cuda
+            )
+            console.print(f"CUDA: [ok]{cuda_info}[/]")
+        else:
+            cuda_info = get_cuda_info_display(
+                has_gpu_cap, gpu_name_cap, compute_cap, "cu126"
+            )
+            console.print(f"CUDA: [muted]{cuda_info}[/]")
 
         if report.missing:
             console.print("[error]Missing dependencies detected:[/]")
