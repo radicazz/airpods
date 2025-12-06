@@ -72,6 +72,7 @@ class PortMapping(BaseModel):
 class VolumeMount(BaseModel):
     source: str
     target: str
+    readonly: bool = False
 
     @field_validator("target")
     @classmethod

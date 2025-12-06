@@ -103,5 +103,29 @@ DEFAULT_CONFIG_DICT = {
             "resources": {},
             "needs_webui_secret": False,
         },
+        "gateway": {
+            "enabled": False,
+            "image": "docker.io/caddy:2.8-alpine",
+            "pod": "gateway",
+            "container": "caddy-0",
+            "network_aliases": ["gateway", "caddy"],
+            "ports": [{"host": 8080, "container": 80}],
+            "volumes": {
+                "config": {
+                    "source": "bind://gateway/Caddyfile",
+                    "target": "/etc/caddy/Caddyfile",
+                    "readonly": True,
+                },
+                "data": {
+                    "source": "bind://gateway/data",
+                    "target": "/data",
+                },
+            },
+            "gpu": {"enabled": False, "force_cpu": False},
+            "health": {"path": "/", "expected_status": [200, 399]},
+            "env": {},
+            "resources": {},
+            "needs_webui_secret": False,
+        },
     },
 }
