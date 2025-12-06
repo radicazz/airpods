@@ -114,3 +114,27 @@ def ensure_webui_secret() -> str:
     except FileExistsError:
         return secret_file.read_text(encoding="utf-8").strip()
     return secret
+
+
+def webui_admin_password_path() -> Path:
+    """Return path to Open WebUI admin password file."""
+    return configs_dir() / "webui_admin_password"
+
+
+def ensure_webui_admin_password() -> str:
+    """Generate and persist Open WebUI admin password."""
+    password_file = webui_admin_password_path()
+    if password_file.exists():
+        return password_file.read_text(encoding="utf-8").strip()
+    
+    password_file.parent.mkdir(parents=True, exist_ok=True)
+    password = secrets.token_urlsafe(24)
+    
+    try:
+        with password_file.open("x", encoding="utf-8") as f:
+            f.write(password)
+        password_file.chmod(0o600)
+    except FileExistsError:
+        return password_file.read_text(encoding="utf-8").strip()
+    
+    return password

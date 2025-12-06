@@ -2,7 +2,11 @@
 
 [![Tests](https://github.com/radicazz/airpods/actions/workflows/test.yml/badge.svg)](https://github.com/radicazz/airpods/actions/workflows/test.yml)
 
-User-friendly CLI for orchestrating local AI services with Podman.
+User-friendly CLI for orchestrating local AI services with Podman. The project currently supports the following services:
+
+- [Ollama]()
+- [Open WebUI]()
+- [ComfyUI]()
 
 ## Prerequisites
 

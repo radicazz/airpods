@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from airpods import plugins
+from airpods import plugins, state
 
 
 def test_sync_plugins_copies_and_preserves_user_files(
@@ -22,7 +22,7 @@ def test_sync_plugins_copies_and_preserves_user_files(
     (target_dir / "legacy.py").write_text("legacy", encoding="utf-8")
 
     monkeypatch.setattr(plugins, "detect_repo_root", lambda _start=None: tmp_path)
-    monkeypatch.setattr(plugins, "volumes_dir", lambda: target_root)
+    monkeypatch.setattr(state, "volumes_dir", lambda: target_root)
 
     synced = plugins.sync_plugins(force=True)
 
@@ -37,7 +37,10 @@ def test_import_functions_uses_container(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     plugin_dir = tmp_path
-    (plugin_dir / "gamma.py").write_text("print('gamma')", encoding="utf-8")
+    # Create a valid plugin with a recognized class
+    (plugin_dir / "gamma.py").write_text(
+        "class Filter:\n    pass\nprint('gamma')", encoding="utf-8"
+    )
 
     captured: dict[str, list[str]] = {}
 

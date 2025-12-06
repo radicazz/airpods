@@ -2,24 +2,41 @@
 
 Auto-installed custom Tools, Functions, and Pipelines for Open WebUI. Automatically synced to the filesystem and imported into the database on `airpods start open-webui`.
 
+## Directory Structure
+
+```
+plugins/open-webui/
+├── tools/                          # Tools - LLM function calling for real-time data
+│   └── weather_tool.py
+├── functions/                      # Functions - Request/response transformation
+│   ├── filters/                    # Filters - Modify messages before/after LLM
+│   │   ├── code_detector_filter.py
+│   │   ├── markdown_enhancer_filter.py
+│   │   ├── system_prompt_enforcer_filter.py
+│   │   └── token_counter_filter.py
+│   └── manifolds/                  # Manifolds - Route to multiple models (empty)
+└── pipelines/                      # Pipelines - Advanced API workflows
+    └── content_moderation_pipeline.py
+```
+
 ## Extension Types
 
-Open WebUI supports three types of extensions:
-
-- **Tools** - Extend LLM capabilities with real-time data access (weather, stocks, web search, etc.)
-- **Functions** - Enhance Open WebUI features (custom UI elements, response formatting, content filtering)
-- **Pipelines** - Advanced API workflows for heavy processing or request transformation
+- **Tools** (`tools/`) - Extend LLM capabilities with real-time data access via function calling (weather, stocks, web search, etc.)
+- **Functions** (`functions/`) - Enhance Open WebUI features:
+  - **Filters** (`functions/filters/`) - Modify requests/responses (UI elements, content filtering, prompt enforcement)
+  - **Manifolds** (`functions/manifolds/`) - Route requests to multiple models simultaneously
+- **Pipelines** (`pipelines/`) - Advanced API workflows for heavy processing or request transformation
 
 ## Available Extensions
 
 ### Tools (Real-time Data Access)
 - **weather_tool** - Fetch real-time weather data for any location using wttr.in API
 
-### Functions (UI & Feature Enhancements)
-- **system_prompt_enforcer** - Enforce consistent system prompts across conversations
-- **code_detector** - Detect programming languages in code blocks and add helpful context
-- **token_counter** - Track and limit token usage with basic estimation
-- **markdown_enhancer_function** - Add custom UI elements (collapsible sections, info boxes, code metadata)
+### Functions - Filters (Message Transformation)
+- **code_detector_filter** - Detect programming languages in code blocks and add helpful context
+- **markdown_enhancer_filter** - Add custom UI elements (collapsible sections, info boxes, code metadata)
+- **system_prompt_enforcer_filter** - Enforce consistent system prompts across conversations
+- **token_counter_filter** - Track and limit token usage with basic estimation
 
 ### Pipelines (Advanced Processing)
 - **content_moderation_pipeline** - Filter toxic/harmful content and detect PII before/after LLM processing
@@ -33,22 +50,42 @@ airpods start open-webui
 # Output during startup:
 # ✓ Synced 6 extension(s)
 # ... (service starts and becomes healthy) ...
+# ✓ Airpods admin user ready (ID: abc123...)
 # ✓ Auto-imported 6 extension(s) into Open WebUI
+#
+# Default admin credentials:
+#   Username: airpods@localhost
+#   Password: ~/.config/airpods/configs/webui_admin_password
 ```
 
 The process:
-1. **Filesystem sync**: Extension files are copied from `plugins/open-webui/` to `$AIRPODS_HOME/volumes/webui_plugins/`
+1. **Filesystem sync**: Extension files are copied from `plugins/open-webui/` (including subdirectories) to `$AIRPODS_HOME/volumes/webui_plugins/`
 2. **Container mount**: The `webui_plugins` directory is mounted to `/app/backend/data/functions` in the container
-3. **Database import**: Once Open WebUI is healthy, extensions are automatically imported into the database via the API
-4. **Ready to use**: Extensions appear in the Admin Panel (Tools, Functions, or Pipelines sections), ready to enable and configure
+3. **Admin user creation**: A dedicated `airpods@localhost` admin account is created in Open WebUI's database to own all imported plugins (prevents "Deleted User" issues)
+4. **Database import**: Once Open WebUI is healthy, extensions are automatically imported into the database via direct SQL injection
+5. **Ready to use**: Extensions appear in the Admin Panel in their respective sections:
+   - **Tools** → Admin Panel → Tools
+   - **Functions (Filters/Manifolds)** → Admin Panel → Functions
+   - **Pipelines** → Admin Panel → Pipelines
 
 ## Usage
 
 1. Start: `airpods start open-webui`
 2. Open http://localhost:3000
-3. Go to **Admin Panel** → **Tools** / **Functions** / **Pipelines** (depending on extension type)
-4. Extensions are already imported—just enable and configure them
-5. Adjust settings (valves) as needed
+3. (Optional) Log in with the airpods admin account:
+   - Username: `airpods@localhost`
+   - Password: Read from `~/.config/airpods/configs/webui_admin_password` (or `$AIRPODS_HOME/configs/webui_admin_password`)
+   - Or create your own user account via the UI
+4. Go to **Admin Panel** → **Tools** / **Functions** / **Pipelines** (depending on extension type)
+5. Extensions are already imported—just enable and configure them
+6. Adjust settings (valves) as needed
+
+**Note:** With the organized directory structure:
+- Tools appear under **Tools** section
+- Filters/Manifolds appear under **Functions** section  
+- Pipelines appear under **Pipelines** section
+
+All imported plugins are owned by the `Airpods Admin` user, which prevents "Auto Imported by Deleted User" issues.
 
 ## Extension Details
 
@@ -76,7 +113,11 @@ Advanced safety layer for LLM interactions:
 
 ## Creating Custom Extensions
 
+Place new extensions in the appropriate directory based on type:
+
 ### Tool Template (Real-time Data Access)
+
+Save in `plugins/open-webui/tools/my_custom_tool.py`:
 
 ```python
 """
@@ -106,7 +147,9 @@ class Tools:
         return f"Result for: {query}"
 ```
 
-### Function Template (UI Enhancement)
+### Function Filter Template (Message Transformation)
+
+Save in `plugins/open-webui/functions/filters/my_custom_filter.py`:
 
 ```python
 """
@@ -135,6 +178,8 @@ class Filter:
 ```
 
 ### Pipeline Template (Advanced Processing)
+
+Save in `plugins/open-webui/pipelines/my_custom_pipeline.py`:
 
 ```python
 """
@@ -169,6 +214,12 @@ class Pipeline:
 
 Save in `plugins/open-webui/`, restart Open WebUI, enable in Admin Panel.
 
+**Directory Guidelines:**
+- `tools/` - For Tools class (function calling)
+- `functions/filters/` - For Filter class (inlet/outlet methods)
+- `functions/manifolds/` - For Manifold class (multi-model routing)
+- `pipelines/` - For Pipeline class (advanced workflows)
+
 ## Troubleshooting
 
 **Extensions not showing in Admin Panel:**
@@ -180,13 +231,23 @@ Save in `plugins/open-webui/`, restart Open WebUI, enable in Admin Panel.
 
 **Auto-import errors:**
 - Ensure the WebUI secret is valid (stored in `$AIRPODS_HOME/configs/webui_secret`)
-- Check network connectivity: `curl http://localhost:3000/api/config`
+- Check that the airpods admin user was created successfully
 - Extensions are still available in the container filesystem at `/app/backend/data/functions/` and can be imported manually through the UI
+
+**"Auto Imported by Deleted User" message:**
+- This issue is now fixed with the automatic creation of the `airpods@localhost` admin account
+- If you see this, try stopping and restarting Open WebUI: `airpods stop open-webui && airpods start open-webui`
+- The restart will ensure the admin user is created and plugins are re-imported with correct ownership
 
 **To manually import/re-import extensions:**
 1. Go to Admin Panel → Tools/Functions/Pipelines in Open WebUI
 2. Click "Import from Filesystem" or use the "+" button
 3. Select the extension files from `/app/backend/data/functions/`
+
+**Admin credentials:**
+- Username: `airpods@localhost`
+- Password location: `$AIRPODS_HOME/configs/webui_admin_password`
+- View password: `cat ~/.config/airpods/configs/webui_admin_password` (adjust path if using different AIRPODS_HOME)
 
 **Extension-specific issues:**
 - **Weather Tool**: Requires internet access from the container; check network connectivity

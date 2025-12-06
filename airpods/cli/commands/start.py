@@ -10,7 +10,7 @@ from rich.live import Live
 from rich.spinner import Spinner
 from rich.table import Table
 
-from airpods import state, ui
+from airpods import plugins, state, ui
 from airpods.logging import console, status_spinner
 from airpods.system import detect_gpu
 from airpods.services import ServiceSpec
@@ -326,12 +326,33 @@ def register(app: typer.Typer) -> CommandMap:
 
         # Auto-import plugins into Open WebUI if service is healthy
         if webui_specs and service_states.get("open-webui") == "healthy":
+            admin_user_id = "system"
+            admin_created = False
+            
+            with status_spinner("Ensuring Airpods admin user"):
+                try:
+                    container_name = webui_specs[0].container
+                    admin_user_id = plugins.ensure_airpods_admin_user(
+                        container_name=container_name
+                    )
+                    admin_created = True
+                    console.print(
+                        f"[ok]✓[/] Airpods admin user ready (ID: {admin_user_id[:8]}...)"
+                    )
+                except Exception as e:
+                    console.print(
+                        f"[warn]Failed to create admin user: {e}. "
+                        "Falling back to 'system' user.[/]"
+                    )
+            
             with status_spinner("Auto-importing plugins into Open WebUI"):
                 try:
                     plugins_dir = plugins.get_plugins_target_dir()
                     container_name = webui_specs[0].container
                     imported = plugins.import_plugins_to_webui(
-                        plugins_dir, container_name=container_name
+                        plugins_dir,
+                        admin_user_id=admin_user_id,
+                        container_name=container_name
                     )
                     if imported > 0:
                         console.print(
@@ -346,6 +367,15 @@ def register(app: typer.Typer) -> CommandMap:
                         f"[warn]Plugin auto-import failed: {e}. "
                         "Plugins are synced to filesystem and can be imported manually via UI.[/]"
                     )
+            
+            # Show admin credentials location only if admin was successfully created
+            if admin_created:
+                password_path = state.webui_admin_password_path()
+                console.print(
+                    f"\n[info]Default admin credentials:[/]\n"
+                    f"  Username: airpods@localhost\n"
+                    f"  Password: {password_path}\n"
+                )
 
     return {"start": start}
 

@@ -260,7 +260,7 @@ def register(app: typer.Typer) -> CommandMap:
             False,
             "--configs",
             "-c",
-            help="Remove config files (config.toml, webui_secret).",
+            help="Remove config files (config.toml, webui_secret, webui_admin_password).",
         ),
         force: bool = typer.Option(
             False, "--force", "-f", help="Skip confirmation prompts."

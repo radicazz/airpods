@@ -16,7 +16,7 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
   - `--volumes/-v`: Remove Podman volumes and bind mount directories
   - `--images/-i`: Remove pulled container images
   - `--network/-n`: Remove the airpods network
-  - `--configs/-c`: Remove config files (config.toml, webui_secret)
+  - `--configs/-c`: Remove config files (config.toml, webui_secret, webui_admin_password)
   - `--force/-f`: Skip confirmation prompts
   - `--dry-run`: Show what would be deleted without deleting
   - `--backup-config`: Backup config.toml before deletion (default: enabled)
@@ -54,9 +54,9 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 ## Data & Images
 - Volumes: `airpods_ollama_data`, `airpods_webui_data`, and `airpods_comfyui_data` are bind-mounted under `$AIRPODS_HOME/volumes/` (e.g., `$AIRPODS_HOME/volumes/airpods_ollama_data`), while the ComfyUI workspace bind (`bind://comfyui/workspace`) lives at `$AIRPODS_HOME/volumes/comfyui/workspace`.
 - Images: `docker.io/ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`, `docker.io/yanwk/comfyui-boot:cu128-slim`; pulled during `start --init`/`start`.
-- Secrets: Open WebUI secret persisted at `$AIRPODS_HOME/configs/webui_secret` (or `$XDG_CONFIG_HOME/airpods/configs/webui_secret` or `~/.config/airpods/configs/webui_secret`) during `start --init`, injected on start via `needs_webui_secret` flag.
+- Secrets: Open WebUI secret persisted at `$AIRPODS_HOME/configs/webui_secret` and admin password at `$AIRPODS_HOME/configs/webui_admin_password` (or corresponding XDG paths) during `start --init`, injected on start via `needs_webui_secret` flag. The admin user (`airpods@localhost`) is automatically created in Open WebUI's database for plugin ownership.
 - Networking: Open WebUI targets Ollama via the Podman alias `http://ollama:11434` (configurable via templates).
-- Configuration: Optional `config.toml` in `configs/` subdirectory at `$AIRPODS_HOME` or XDG paths; deep-merged with defaults. All airpods configuration files (config.toml, webui_secret, etc.) are stored together in the `configs/` subdirectory.
+- Configuration: Optional `config.toml` in `configs/` subdirectory at `$AIRPODS_HOME` or XDG paths; deep-merged with defaults. All airpods configuration files (config.toml, webui_secret, webui_admin_password, etc.) are stored together in the `configs/` subdirectory.
 
 ## Testing Approach
 - Unit tests mock subprocess interactions to validate command flow and flags.
