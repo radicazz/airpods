@@ -12,6 +12,56 @@ TEMPLATE_PATTERN = re.compile(r"\{\{([^}]+)\}\}")
 MAX_RESOLUTION_DEPTH = 100
 
 
+def resolve_caddyfile_template(template: str, config: AirpodsConfig) -> str:
+    """Resolve template variables in Caddyfile template.
+    
+    This is a simpler resolver that only processes {{variable}} patterns
+    once, without recursion. This avoids conflicts with Caddy's own { } syntax.
+    
+    Args:
+        template: Caddyfile template content
+        config: Loaded configuration
+        
+    Returns:
+        Resolved Caddyfile content
+    """
+    data = config.to_dict()
+    
+    # Build context
+    context = {
+        "runtime": data.get("runtime", {}),
+        "services": {},
+    }
+    for service_name, service_data in data.get("services", {}).items():
+        ports = service_data.get("ports", [])
+        context["services"][service_name] = {
+            "ports": ports,
+            "image": service_data.get("image"),
+            "pod": service_data.get("pod"),
+        }
+    
+    # Single-pass replacement (no recursion)
+    missing: list[str] = []
+    
+    def _replace(match: re.Match[str]) -> str:
+        path = match.group(1).strip()
+        value = _lookup_path(path, context)
+        if value is None:
+            missing.append(path)
+            return match.group(0)
+        return str(value)
+    
+    resolved = TEMPLATE_PATTERN.sub(_replace, template)
+    
+    if missing:
+        refs = ", ".join(sorted(set(missing)))
+        raise ConfigurationError(
+            f"Template variables not found in Caddyfile: {refs}"
+        )
+    
+    return resolved
+
+
 def resolve_templates(config: AirpodsConfig) -> AirpodsConfig:
     """Resolve supported template variables inside configuration env vars."""
     data = config.to_dict()
