@@ -376,6 +376,61 @@ def register(app: typer.Typer) -> CommandMap:
                     f"  Username: airpods@localhost\n"
                     f"  Password: {password_path}\n"
                 )
+        
+        # Start gateway if enabled and Open WebUI is healthy
+        gateway_specs = [s for s in specs if s.name == "gateway"]
+        if gateway_specs and service_states.get("open-webui") == "healthy":
+            gateway_spec = gateway_specs[0]
+            
+            with status_spinner("Generating Caddyfile from template"):
+                try:
+                    from pathlib import Path
+                    from airpods.paths import detect_repo_root
+                    from airpods.configuration import get_config
+                    from airpods.configuration.resolver import resolve_caddyfile_template
+                    
+                    # Find template file
+                    repo_root = detect_repo_root()
+                    if repo_root:
+                        template_path = repo_root / "configs/gateway/Caddyfile.template"
+                    else:
+                        # Fallback for installed package
+                        import airpods
+                        package_root = Path(airpods.__file__).parent.parent
+                        template_path = package_root / "configs/gateway/Caddyfile.template"
+                    
+                    if not template_path.exists():
+                        raise FileNotFoundError(f"Caddyfile template not found at {template_path}")
+                    
+                    # Load and resolve template
+                    template_content = template_path.read_text(encoding="utf-8")
+                    config = get_config()
+                    resolved_content = resolve_caddyfile_template(template_content, config)
+                    
+                    # Write to volume directory
+                    caddyfile_path = state.ensure_gateway_caddyfile(resolved_content)
+                    console.print(f"[ok]✓[/] Generated Caddyfile at {caddyfile_path}")
+                    
+                except Exception as e:
+                    console.print(f"[error]Failed to generate Caddyfile: {e}[/]")
+                    raise typer.Exit(code=1)
+            
+            with status_spinner("Starting gateway service"):
+                try:
+                    result = manager.start_service(
+                        gateway_spec, gpu_available=False, force_cpu=True
+                    )
+                    console.print("[ok]✓[/] Gateway started")
+                except Exception as e:
+                    console.print(f"[error]Failed to start gateway: {e}[/]")
+                    raise typer.Exit(code=1)
+            
+            # Update service URLs to point to gateway
+            gateway_port = gateway_spec.ports[0][0] if gateway_spec.ports else 8080
+            console.print(
+                f"\n[ok]Gateway running at http://localhost:{gateway_port}[/]\n"
+                f"[info]Open WebUI accessible via gateway only (internal: open-webui:8080)[/]\n"
+            )
 
     return {"start": start}
 
