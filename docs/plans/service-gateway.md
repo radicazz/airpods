@@ -236,99 +236,251 @@ needs_webui_secret = false  # Auth delegated to Open WebUI
   - Because the gateway itself is optional, users can decide whether they want an extra password gate in front of Open WebUI or rely solely on Open WebUI’s own auth.
   - Future configuration extensions can build on this pattern by allowing more granular control over which routes are protected by gateway-level auth versus service-level auth.
 
-## Implementation Roadmap
+## Implementation Roadmap (Commit-Oriented)
 
-### Phase 1: Forward Auth MVP (Current Branch)
-**Goal**: Enable gateway with Open WebUI forward authentication.
-
-**Code Changes**:
-1. **Configuration** (`airpods/configuration/`):
-   - Add `gateway` service to `defaults.py` (disabled by default)
-   - Schema validation for gateway service spec
-   - Template resolver support for Caddyfile generation
-
-2. **State Management** (`airpods/state.py`):
-   ```python
-   def gateway_caddyfile_path() -> Path:
-       return volumes_dir() / "gateway" / "Caddyfile"
-   
-   def ensure_gateway_caddyfile(content: str) -> Path:
-       path = gateway_caddyfile_path()
-       path.parent.mkdir(parents=True, exist_ok=True)
-       path.write_text(content, encoding="utf-8")
-       return path
-   ```
-
-3. **Service Manager** (`airpods/services.py`):
-   - Dynamic port binding for Open WebUI based on `gateway.enabled` flag
-   - Logic: if gateway enabled, set `open-webui.ports = []` (internal only)
-   - Gateway starts after Open WebUI is healthy
-
-4. **Start Command** (`airpods/cli/commands/start.py`):
-   ```python
-   # After Open WebUI health check passes
-   if gateway_enabled:
-       caddyfile_template = load_caddyfile_template()
-       resolved_content = resolver.resolve(caddyfile_template)
-       state.ensure_gateway_caddyfile(resolved_content)
-       manager.start_service(gateway_spec)
-       console.print("[ok]Gateway started at http://localhost:8080[/]")
-   ```
-
-5. **Caddyfile Template** (`configs/Caddyfile.template`):
-   ```caddyfile
-   {
-     auto_https off
-     admin off
-   }
-   
-   :{{services.gateway.ports.0.container}} {
-     @login path /api/v1/auths/* /auth/*
-     handle @login {
-       reverse_proxy open-webui:{{services.open-webui.ports.0.container}}
-     }
-     
-     @protected not path /api/v1/auths/* /auth/*
-     handle @protected {
-       forward_auth open-webui:{{services.open-webui.ports.0.container}} {
-         uri /api/v1/users/me
-         copy_headers Cookie Authorization
-       }
-       reverse_proxy open-webui:{{services.open-webui.ports.0.container}}
-     }
-   }
-   ```
-
-6. **Status/Logs/Stop Commands**:
-   - Gateway appears in `airpods status` output
-   - `airpods logs gateway` works like other services
-   - `airpods stop` includes gateway in shutdown sequence
-
-**Testing**:
-- Unit tests for Caddyfile generation and template resolution
-- Integration test: start with `gateway.enabled = true`, verify port bindings
-- Manual test: login via gateway, confirm forward auth works
-
-### Phase 2: Portal Admin Routes (Future)
-**Goal**: Add `/portal` admin interface with optional Basic Auth layer.
+### Commit 1: `feat: add gateway service to configuration schema`
+**Files**:
+- `airpods/configuration/defaults.py`
+- `airpods/configuration/schema.py`
 
 **Changes**:
-- `airpods-webui` backend serving both `/chat` (proxied Open WebUI) and `/portal` (orchestration UI)
-- Caddyfile extended with Basic Auth for `/portal/*` routes
-- `auth_secret` helper added to `state.py` for Basic Auth password generation
-- Configuration option: `gateway.portal_auth_enabled` (default: true)
+```python
+# defaults.py - Add gateway service to DEFAULT_CONFIG_DICT
+"gateway": {
+    "enabled": False,  # Opt-in feature
+    "image": "docker.io/caddy:2.8-alpine",
+    "pod": "gateway",
+    "container": "caddy-0",
+    "network_aliases": ["gateway", "caddy"],
+    "ports": [{"host": 8080, "container": 80}],
+    "volumes": {
+        "config": {
+            "source": "bind://gateway/Caddyfile",
+            "target": "/etc/caddy/Caddyfile",
+            "readonly": True,
+        },
+        "data": {"source": "bind://gateway/data", "target": "/data"},
+    },
+    "health": {"path": "/", "expected_status": [200, 399]},
+    "env": {},
+    "needs_webui_secret": False,
+}
+```
 
-### Phase 3: Advanced Auth (Stretch Goals)
-- TLS certificate management via Caddy (Let's Encrypt, self-signed)
-- OIDC integration using `caddy-security` plugin
-- Multi-backend routing (Open WebUI, ComfyUI, custom services)
+**Testing**: `uv run pytest tests/configuration/` passes with new service schema.
+
+---
+
+### Commit 2: `feat: add gateway state helpers for Caddyfile management`
+**Files**:
+- `airpods/state.py`
+- `tests/test_state.py`
+
+**Changes**:
+```python
+# state.py
+def gateway_caddyfile_path() -> Path:
+    """Return path to generated Caddyfile."""
+    return volumes_dir() / "gateway" / "Caddyfile"
+
+def ensure_gateway_caddyfile(content: str) -> Path:
+    """Write Caddyfile content to gateway volume directory."""
+    path = gateway_caddyfile_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
+```
+
+**Tests**: Add unit tests for path resolution and file creation.
+
+---
+
+### Commit 3: `feat: add Caddyfile template with forward auth`
+**Files**:
+- `configs/gateway/Caddyfile.template` (new)
+- `airpods/configuration/resolver.py` (template loading logic)
+
+**Changes**:
+```caddyfile
+# configs/gateway/Caddyfile.template
+{
+  auto_https off
+  admin off
+}
+
+:{{services.gateway.ports.0.container}} {
+  # Allow Open WebUI login routes (bypass forward auth)
+  @login path /api/v1/auths/* /auth/*
+  handle @login {
+    reverse_proxy open-webui:{{services.open-webui.ports.0.container}}
+  }
+  
+  # Forward auth for all other routes
+  @protected not path /api/v1/auths/* /auth/*
+  handle @protected {
+    forward_auth open-webui:{{services.open-webui.ports.0.container}} {
+      uri /api/v1/users/me
+      copy_headers Cookie Authorization
+    }
+    reverse_proxy open-webui:{{services.open-webui.ports.0.container}}
+  }
+}
+```
+
+**Testing**: Template resolver can parse and substitute variables correctly.
+
+---
+
+### Commit 4: `feat: implement dynamic port binding for gateway-enabled mode`
+**Files**:
+- `airpods/services.py`
+- `airpods/configuration/loader.py`
+
+**Changes**:
+```python
+# services.py - Add logic to modify service specs based on gateway.enabled
+def resolve_service_specs(config: RuntimeConfig) -> list[ServiceSpec]:
+    """Resolve service specs with dynamic port binding."""
+    specs = []
+    gateway_enabled = config.services.get("gateway", {}).get("enabled", False)
+    
+    for name, svc_config in config.services.items():
+        if not svc_config.enabled:
+            continue
+        
+        spec = ServiceSpec.from_config(name, svc_config)
+        
+        # If gateway is enabled, remove Open WebUI host port binding
+        if gateway_enabled and name == "open-webui":
+            spec.ports = []  # Internal-only on airpods_network
+        
+        specs.append(spec)
+    
+    return specs
+```
+
+**Testing**: Unit test verifies Open WebUI ports removed when `gateway.enabled = True`.
+
+---
+
+### Commit 5: `feat: integrate gateway into start command`
+**Files**:
+- `airpods/cli/commands/start.py`
+
+**Changes**:
+```python
+# After Open WebUI health check passes in start command
+if gateway_spec := [s for s in specs if s.name == "gateway"]:
+    with status_spinner("Generating Caddyfile from template"):
+        template_path = detect_repo_root() / "configs/gateway/Caddyfile.template"
+        template_content = template_path.read_text(encoding="utf-8")
+        from airpods.configuration.resolver import TemplateResolver
+        resolver = TemplateResolver(manager.runtime.get_config())
+        resolved_content = resolver.resolve(template_content)
+        state.ensure_gateway_caddyfile(resolved_content)
+    
+    with status_spinner("Starting gateway service"):
+        manager.start_service(gateway_spec[0], gpu_available=False, force_cpu=True)
+    
+    # Update service URLs to point to gateway
+    console.print("[ok]Gateway started at http://localhost:8080[/]")
+    console.print("[info]Open WebUI accessible via gateway only (internal: open-webui:8080)[/]")
+```
+
+**Testing**: Manual test with `gateway.enabled = True` in config.toml.
+
+---
+
+### Commit 6: `feat: add gateway to status/logs/stop commands`
+**Files**:
+- `airpods/cli/commands/status.py`
+- `airpods/cli/commands/logs.py`
+- `airpods/cli/commands/stop.py`
+
+**Changes**:
+- `status`: Gateway appears in service table with health check
+- `logs`: `airpods logs gateway` tails Caddy container logs
+- `stop`: `airpods stop` includes gateway in shutdown sequence
+
+**Testing**: Verify gateway shows in `airpods status` output when enabled.
+
+---
+
+### Commit 7: `test: add integration tests for gateway forward auth`
+**Files**:
+- `tests/integration/test_gateway.py` (new)
+
+**Changes**:
+```python
+# tests/integration/test_gateway.py
+def test_gateway_forward_auth():
+    """Test gateway delegates auth to Open WebUI."""
+    # Start services with gateway enabled
+    # Attempt unauthenticated request → expect 401
+    # Login via /api/v1/auths/signin → get JWT
+    # Authenticated request with JWT → expect 200
+    # Verify Caddy called /api/v1/users/me
+```
+
+**Testing**: Integration tests pass (requires Podman).
+
+---
+
+### Commit 8: `docs: add gateway service usage documentation`
+**Files**:
+- `docs/commands/start.md`
+- `README.md`
+
+**Changes**:
+- Document `services.gateway.enabled` configuration option
+- Explain forward auth vs direct access
+- Add example: enabling gateway in `config.toml`
+- Update port table (8080 for gateway, 3000 becomes internal-only)
+
+---
+
+### Future Work (Post-MVP)
+
+#### Commit 9+: Portal admin routes with Basic Auth
+- Add `auth_secret` helpers to `state.py`
+- Extend Caddyfile template with `/portal` routes
+- Add `airpods-webui` backend service
+
+#### Commit 10+: Advanced features
+- TLS certificate management
+- OIDC/OAuth plugin integration
+- Multi-service routing (ComfyUI, custom backends)
 - Rate limiting and access logs
 
 ## Summary
 
-- The gateway service is an optional, Caddy-based edge layer that:
-  - Provides a single HTTP entrypoint in front of Open WebUI (and later airpods-webui + portal).
-  - Uses `AIRPODS_HOME` to store its secrets and Caddyfile, mirroring production layouts.
-  - Applies Basic Auth in the MVP using an `auth_secret` file, with room to grow into more advanced auth.
-  - Is managed like any other airpods service via Podman, keeping airpods in its role as an orchestrator rather than a web server or auth provider.
-- Together, the gateway/auth plans define how this service can secure, hide, and route access to the local AI stack without changing the core CLI’s responsibilities.
+The gateway service is an **optional, Caddy-based reverse proxy** that provides unified authentication and secure access control for the airpods AI stack:
+
+**Key Features**:
+- **Forward Authentication**: Delegates session validation to Open WebUI's JWT system via `/api/v1/users/me` endpoint
+- **Single Sign-On**: Users log in once via Open WebUI; Caddy validates subsequent requests without credential duplication
+- **Zero Code Changes**: Leverages Open WebUI's existing auth (bcrypt passwords, JWT tokens, user database)
+- **Network Isolation**: Hides internal services (Open WebUI, ComfyUI) behind gateway; only gateway port exposed to host
+- **Config-Driven**: Enabled via `services.gateway.enabled = true`; Caddyfile generated from templates using existing resolver
+- **Optional**: Default disabled; users can choose direct access or gateway-fronted access
+
+**Implementation Strategy**:
+- **8 focused commits** for MVP (configuration → state helpers → template → dynamic ports → start integration → CLI commands → tests → docs)
+- Each commit is independently testable and reviewable
+- Follows existing airpods patterns (TOML config, template resolution, Podman orchestration)
+- CI/CD compatible (tests run in isolation, no Podman required for unit tests)
+
+**Benefits Over Basic Auth Approach**:
+- No plaintext password files (auth delegated to Open WebUI)
+- Supports Open WebUI's multi-user system (roles, permissions, OAuth, LDAP)
+- User management via Open WebUI Admin Panel (no CLI password resets)
+- Session revocation works immediately (disable user → forward auth returns 401)
+- Compatible with Open WebUI's future auth enhancements (SSO, MFA, etc.)
+
+**Development Timeline** (estimated):
+- Commits 1-3: Configuration & templates (~2-3 hours)
+- Commits 4-6: Integration with CLI commands (~3-4 hours)
+- Commits 7-8: Testing & documentation (~2-3 hours)
+- **Total MVP**: ~8-10 hours of focused development
+
+This plan enables secure, production-ready deployments while keeping airpods focused on orchestration rather than reimplementing authentication.
