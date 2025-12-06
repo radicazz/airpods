@@ -91,7 +91,7 @@ def _normalize_source(path: Union[str, os.PathLike[str]]) -> Path:
 def ensure_volume_source(source: Union[str, os.PathLike[str]]) -> tuple[Path, bool]:
     path = _normalize_source(source)
     existed = path.exists()
-    if path.is_absolute():
+    if path.is_absolute() and not path.is_file():
         path.mkdir(parents=True, exist_ok=True)
     created = path.is_absolute() and not existed
     return path, created

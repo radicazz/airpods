@@ -145,6 +145,39 @@ def register(app: typer.Typer) -> CommandMap:
         print_network_status(network_created, manager.network_name)
 
         with status_spinner("Ensuring volumes"):
+            # Generate Caddyfile before ensuring volumes if gateway is enabled
+            gateway_specs = [s for s in specs_to_start if s.name == "gateway"]
+            if gateway_specs:
+                try:
+                    from pathlib import Path
+                    from airpods.paths import detect_repo_root
+                    from airpods.configuration import get_config
+                    from airpods.configuration.resolver import resolve_caddyfile_template
+                    
+                    # Find template file
+                    repo_root = detect_repo_root()
+                    if repo_root:
+                        template_path = repo_root / "configs/gateway/Caddyfile.template"
+                    else:
+                        # Fallback for installed package
+                        import airpods
+                        package_root = Path(airpods.__file__).parent.parent
+                        template_path = package_root / "configs/gateway/Caddyfile.template"
+                    
+                    if not template_path.exists():
+                        raise FileNotFoundError(f"Caddyfile template not found at {template_path}")
+                    
+                    # Load and resolve template
+                    template_content = template_path.read_text(encoding="utf-8")
+                    config = get_config()
+                    resolved_content = resolve_caddyfile_template(template_content, config)
+                    
+                    # Write to volume directory (before ensure_volumes creates it as a directory)
+                    caddyfile_path = state.ensure_gateway_caddyfile(resolved_content)
+                except Exception as e:
+                    console.print(f"[error]Failed to generate Caddyfile: {e}[/]")
+                    raise typer.Exit(code=1)
+            
             volume_results = manager.ensure_volumes(specs_to_start)
         print_volume_status(volume_results)
 
@@ -247,8 +280,8 @@ def register(app: typer.Typer) -> CommandMap:
             while True:
                 elapsed = time.time() - start_time
                 if elapsed >= timeout_seconds:
-                    for name, state in service_states.items():
-                        if state in pending_states:
+                    for name, svc_state in service_states.items():
+                        if svc_state in pending_states:
                             service_states[name] = "timeout"
                     live.update(_make_unified_table())
                     break
@@ -256,10 +289,10 @@ def register(app: typer.Typer) -> CommandMap:
                 pod_rows = manager.pod_status_rows() or {}
                 all_done = True
                 for spec in specs_to_start:
-                    state = service_states[spec.name]
-                    if state in ("healthy", "failed", "timeout"):
+                    svc_state = service_states[spec.name]
+                    if svc_state in ("healthy", "failed", "timeout"):
                         continue
-                    if state not in pending_states:
+                    if svc_state not in pending_states:
                         all_done = False
                         continue
 
@@ -381,39 +414,8 @@ def register(app: typer.Typer) -> CommandMap:
         gateway_specs = [s for s in specs if s.name == "gateway"]
         if gateway_specs and service_states.get("open-webui") == "healthy":
             gateway_spec = gateway_specs[0]
-            
-            with status_spinner("Generating Caddyfile from template"):
-                try:
-                    from pathlib import Path
-                    from airpods.paths import detect_repo_root
-                    from airpods.configuration import get_config
-                    from airpods.configuration.resolver import resolve_caddyfile_template
-                    
-                    # Find template file
-                    repo_root = detect_repo_root()
-                    if repo_root:
-                        template_path = repo_root / "configs/gateway/Caddyfile.template"
-                    else:
-                        # Fallback for installed package
-                        import airpods
-                        package_root = Path(airpods.__file__).parent.parent
-                        template_path = package_root / "configs/gateway/Caddyfile.template"
-                    
-                    if not template_path.exists():
-                        raise FileNotFoundError(f"Caddyfile template not found at {template_path}")
-                    
-                    # Load and resolve template
-                    template_content = template_path.read_text(encoding="utf-8")
-                    config = get_config()
-                    resolved_content = resolve_caddyfile_template(template_content, config)
-                    
-                    # Write to volume directory
-                    caddyfile_path = state.ensure_gateway_caddyfile(resolved_content)
-                    console.print(f"[ok]✓[/] Generated Caddyfile at {caddyfile_path}")
-                    
-                except Exception as e:
-                    console.print(f"[error]Failed to generate Caddyfile: {e}[/]")
-                    raise typer.Exit(code=1)
+            # Caddyfile already generated before volume ensure
+            console.print(f"[info]Using Caddyfile at {state.gateway_caddyfile_path()}[/]")
             
             with status_spinner("Starting gateway service"):
                 try:
