@@ -12,6 +12,10 @@ airpods start
 airpods start ollama
 airpods start open-webui
 
+# Start with gateway enabled (see Gateway Service below)
+# Edit config first: services.gateway.enabled = true
+airpods start
+
 # Initialize dependencies without starting
 airpods start --init
 ```
@@ -25,6 +29,76 @@ The `start` command:
 4. Launches pods with configured services
 5. Waits for health checks (HTTP endpoints)
 6. Auto-configures Open WebUI admin user and imports plugins
+7. Optionally starts gateway service for unified authentication (when enabled)
+
+## Gateway Service (Optional)
+
+The gateway service provides a unified entrypoint with authentication using Caddy as a reverse proxy.
+
+### Enabling the Gateway
+
+Edit your config file (`~/.config/airpods/configs/config.toml`):
+
+```toml
+[services.gateway]
+enabled = true  # Change from false to true
+```
+
+### How It Works
+
+When gateway is enabled:
+
+1. **Single Port**: Access everything through `http://localhost:8080` (gateway)
+2. **Forward Auth**: Caddy delegates authentication to Open WebUI's JWT system
+3. **Internal WebUI**: Open WebUI runs on internal network only (`open-webui:8080`)
+4. **Single Sign-On**: Log in once via Open WebUI, subsequent requests validated automatically
+
+### Authentication Flow
+
+```
+Browser → Gateway (localhost:8080) 
+  → Caddy checks /api/v1/users/me on Open WebUI
+  → If valid JWT: proxy request to Open WebUI
+  → If invalid: return 401 (user must login)
+```
+
+### Port Changes
+
+| Service    | Gateway Disabled       | Gateway Enabled         |
+|------------|------------------------|-------------------------|
+| Open WebUI | `localhost:3000`       | Internal only           |
+| Gateway    | N/A                    | `localhost:8080`        |
+| Ollama     | `localhost:11434`      | `localhost:11434`       |
+| ComfyUI    | `localhost:8188`       | `localhost:8188`        |
+
+### Example Output
+
+```
+✓ Gateway started
+✓ Generated Caddyfile at ~/.config/airpods/volumes/gateway/Caddyfile
+
+Gateway running at http://localhost:8080
+Open WebUI accessible via gateway only (internal: open-webui:8080)
+```
+
+### Benefits
+
+- **Security**: Open WebUI not directly exposed to network
+- **No Credential Duplication**: Uses Open WebUI's existing user database
+- **Multi-User**: Supports Open WebUI's roles, permissions, OAuth, LDAP
+- **Session Revocation**: Disabling user in WebUI immediately blocks access
+
+### Disabling the Gateway
+
+Set `enabled = false` in config and restart:
+
+```bash
+airpods stop
+# Edit config: services.gateway.enabled = false
+airpods start
+```
+
+Open WebUI will be accessible directly at `localhost:3000` again.
 
 ## Admin User Creation
 
