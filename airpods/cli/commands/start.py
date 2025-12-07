@@ -22,9 +22,11 @@ from ..common import (
     DEFAULT_STARTUP_CHECK_INTERVAL,
     ensure_podman_available,
     format_transfer_label,
+    is_verbose_mode,
     manager,
     print_network_status,
     print_volume_status,
+    print_config_info,
     refresh_cli_context,
     resolve_services,
     get_cli_config,
@@ -89,10 +91,10 @@ def register(app: typer.Typer) -> CommandMap:
 
         if config_path is None:
             config_path = locate_config_file()
-        if config_path:
-            console.print(f"[info]Config file: {config_path}")
-        else:
-            console.print("[warn]No config file found; using built-in defaults.[/]")
+        
+        # Check verbose mode from context
+        verbose = is_verbose_mode(ctx)
+        print_config_info(config_path, verbose=verbose)
 
         specs = resolve_services(service)
         ensure_podman_available()
@@ -172,11 +174,11 @@ def register(app: typer.Typer) -> CommandMap:
         # Only ensure network/volumes if we're actually starting something
         with status_spinner("Ensuring network"):
             network_created = manager.ensure_network()
-        print_network_status(network_created, manager.network_name)
+        print_network_status(network_created, manager.network_name, verbose=verbose)
 
         with status_spinner("Ensuring volumes"):
             volume_results = manager.ensure_volumes(specs_to_start)
-        print_volume_status(volume_results)
+        print_volume_status(volume_results, verbose=verbose)
 
         # Sync Open WebUI plugins if webui is being started
         from airpods import plugins
@@ -185,181 +187,151 @@ def register(app: typer.Typer) -> CommandMap:
         if webui_specs:
             with status_spinner("Syncing Open WebUI plugins"):
                 synced = plugins.sync_plugins()
+            # Only show plugin sync messages if changes were made
             if synced > 0:
-                console.print(f"[ok]✓[/] Synced {synced} plugin(s)")
-            else:
+                console.print(f"[ok]Synced {synced} plugin(s)[/]")
+            elif verbose:
                 console.print("[info]Plugins already up-to-date[/]")
 
-        # Initialize service states for the unified table
-        service_states: dict[str, str] = {
-            spec.name: "pulling" for spec in specs_to_start
-        }
-        service_urls: dict[str, str] = {spec.name: "" for spec in specs_to_start}
-        service_transfers: dict[str, str] = {}
-        pull_start_times: dict[str, float] = {}
-        start_time = time.time()
-
-        def _make_unified_table() -> Table:
-            """Create the unified startup table showing all phases."""
-            table = ui.themed_table(
-                title="[info]Starting Services",
-            )
-            table.add_column("Service", style="cyan")
-            table.add_column("Image", style="dim")
-            table.add_column("Transfer", style="dim", justify="right")
-            table.add_column("Status", style="")
-
-            for spec in specs_to_start:
-                state_val = service_states[spec.name]
-                url = service_urls[spec.name]
-                transfer = service_transfers.get(spec.name, "")
-
-                if state_val == "pulling":
-                    spinner = Spinner("dots", style="info")
-                    table.add_row(spec.name, spec.image, transfer, spinner)
-                elif state_val == "pulled":
-                    table.add_row(spec.name, spec.image, transfer, "[ok]✓ Ready")
-                elif state_val == "starting":
-                    spinner = Spinner("dots", style="info")
-                    table.add_row(spec.name, spec.image, transfer, spinner)
-                elif state_val == "started":
-                    spinner = Spinner("dots", style="info")
-                    table.add_row(spec.name, spec.image, transfer, spinner)
-                elif state_val == "healthy":
-                    if url:
-                        table.add_row(spec.name, spec.image, transfer, f"[ok]✓ {url}")
-                    else:
-                        table.add_row(spec.name, spec.image, transfer, "[ok]✓ Healthy")
-                elif state_val == "failed":
-                    table.add_row(spec.name, spec.image, transfer, "[error]✗ Failed")
-                elif state_val == "timeout":
-                    table.add_row(spec.name, spec.image, transfer, "[warn]⏱ Timeout")
-
-            elapsed = time.time() - start_time
-            table.caption = f"[dim]Elapsed: {int(elapsed)}s"
-            return table
-
-        with Live(_make_unified_table(), refresh_per_second=4, console=console) as live:
-            # Pull images
-            def _image_progress(phase, index, _total_count, spec):
-                if phase == "start":
-                    service_states[spec.name] = "pulling"
-                    pull_start_times[spec.name] = time.perf_counter()
-                    service_transfers[spec.name] = "[dim]estimating..."
-                else:
-                    service_states[spec.name] = "pulled"
-                    elapsed = time.perf_counter() - pull_start_times.pop(
-                        spec.name, time.perf_counter()
-                    )
+        # Simple log-based startup process
+        service_urls: dict[str, str] = {}
+        failed_services = []
+        timeout_services = []
+        
+        # Pull images with simple logging
+        def _image_progress(phase, index, _total_count, spec):
+            if phase == "start":
+                if verbose:
+                    console.print(f"Pulling [accent]{spec.image}[/]...")
+            else:
+                if verbose:
+                    elapsed = time.perf_counter() - pull_start_times.get(spec.name, 0)
                     size = manager.runtime.image_size(spec.image)
                     transfer = format_transfer_label(size, elapsed)
-                    service_transfers[spec.name] = transfer or f"{elapsed:.1f}s"
-                live.update(_make_unified_table())
+                    if transfer:
+                        console.print(f"[ok]✓[/] Pulled {spec.name} ({transfer})")
+                    else:
+                        console.print(f"[ok]✓[/] Pulled {spec.name}")
 
-            manager.pull_images(
-                specs_to_start,
-                progress_callback=_image_progress,
-                max_concurrent=max_concurrent_pulls,
-            )
-            live.update(_make_unified_table())
+        pull_start_times: dict[str, float] = {}
+        def _track_pull_start(phase, index, _total_count, spec):
+            if phase == "start":
+                pull_start_times[spec.name] = time.perf_counter()
+            _image_progress(phase, index, _total_count, spec)
 
-            # Start containers
-            for spec in specs_to_start:
-                service_states[spec.name] = "starting"
-                live.update(_make_unified_table())
-                result = manager.start_service(
+        manager.pull_images(
+            specs_to_start,
+            progress_callback=_track_pull_start if verbose else lambda *args: None,
+            max_concurrent=max_concurrent_pulls,
+        )
+
+        # Start services with simple logging
+        for spec in specs_to_start:
+            console.print(f"Starting [accent]{spec.name}[/]...")
+            
+            try:
+                manager.start_service(
                     spec, gpu_available=gpu_available, force_cpu=force_cpu
                 )
-                # Don't log status here - it breaks Live rendering
-                # Status is visible in the table already
-                service_states[spec.name] = "started"
-                live.update(_make_unified_table())
+            except Exception as e:
+                console.print(f"[error]✗ Failed to start {spec.name}: {e}[/]")
+                failed_services.append(spec.name)
+                continue
 
-            # Wait for health checks
-            timeout_seconds = DEFAULT_STARTUP_TIMEOUT
-            pending_states = {"starting", "started"}
-            while True:
-                elapsed = time.time() - start_time
-                if elapsed >= timeout_seconds:
-                    for name, state in service_states.items():
-                        if state in pending_states:
-                            service_states[name] = "timeout"
-                    live.update(_make_unified_table())
-                    break
-
-                pod_rows = manager.pod_status_rows() or {}
-                all_done = True
-                for spec in specs_to_start:
-                    state = service_states[spec.name]
-                    if state in ("healthy", "failed", "timeout"):
-                        continue
-                    if state not in pending_states:
-                        all_done = False
-                        continue
-
-                    row = pod_rows.get(spec.pod)
-                    if not row:
-                        all_done = False
-                        continue
-
-                    pod_status = (row.get("Status") or "").strip()
-
-                    if pod_status in {"Exited", "Error"}:
-                        service_states[spec.name] = "failed"
-                        continue
-                    if pod_status != "Running":
-                        all_done = False
-                        continue
-
-                    port_bindings = manager.service_ports(spec)
-                    host_ports = collect_host_ports(spec, port_bindings)
-                    host_port = host_ports[0] if host_ports else None
-
-                    if not spec.health_path or host_port is None:
-                        service_states[spec.name] = "healthy"
-                        if host_port:
-                            service_urls[spec.name] = f"http://localhost:{host_port}"
-                        continue
-
-                    if check_service_health(spec, host_port):
-                        service_states[spec.name] = "healthy"
+        # Wait for health checks with timeout
+        start_time = time.time()
+        timeout_seconds = DEFAULT_STARTUP_TIMEOUT
+        
+        while True:
+            elapsed = time.time() - start_time
+            if elapsed >= timeout_seconds:
+                break
+                
+            pod_rows = manager.pod_status_rows() or {}
+            all_done = True
+            
+            for spec in specs_to_start:
+                if spec.name in failed_services:
+                    continue
+                    
+                row = pod_rows.get(spec.pod)
+                if not row:
+                    all_done = False
+                    continue
+                    
+                pod_status = (row.get("Status") or "").strip()
+                
+                if pod_status in {"Exited", "Error"}:
+                    if spec.name not in failed_services:
+                        failed_services.append(spec.name)
+                    continue
+                    
+                if pod_status != "Running":
+                    all_done = False
+                    continue
+                    
+                # Service is running, check health if needed
+                if spec.name in service_urls:
+                    continue  # Already healthy
+                    
+                port_bindings = manager.service_ports(spec)
+                host_ports = collect_host_ports(spec, port_bindings)
+                host_port = host_ports[0] if host_ports else None
+                
+                if not spec.health_path or host_port is None:
+                    # No health check needed
+                    if host_port:
                         service_urls[spec.name] = f"http://localhost:{host_port}"
                     else:
-                        all_done = False
+                        service_urls[spec.name] = ""
+                    continue
+                    
+                if check_service_health(spec, host_port):
+                    service_urls[spec.name] = f"http://localhost:{host_port}"
+                else:
+                    all_done = False
+                    
+            if all_done:
+                break
+                
+            time.sleep(DEFAULT_STARTUP_CHECK_INTERVAL)
+            
+        # Handle timeouts
+        for spec in specs_to_start:
+            if spec.name not in failed_services and spec.name not in service_urls:
+                timeout_services.append(spec.name)
 
-                live.update(_make_unified_table())
+        # Categorize results  
+        healthy_services = [name for name in service_urls.keys() if name not in failed_services]
+        failed = failed_services
 
-                if all_done:
-                    break
-
-                time.sleep(DEFAULT_STARTUP_CHECK_INTERVAL)
-
-        failed = [
-            spec.name
-            for spec in specs_to_start
-            if service_states.get(spec.name) == "failed"
-        ]
-        timeout_services = [
-            spec.name
-            for spec in specs_to_start
-            if service_states.get(spec.name) == "timeout"
-        ]
+        # Show clean completion summary
+        if healthy_services:
+            urls = [
+                service_urls.get(name)
+                for name in healthy_services
+                if service_urls.get(name)
+            ]
+            url_display = f" • {', '.join(urls)}" if urls else ""
+            console.print(
+                f"[ok]✓ Started {len(healthy_services)} service{'s' if len(healthy_services) != 1 else ''}{url_display}[/]"
+            )
 
         if failed:
             console.print(
-                f"\n[error]Failed services: {', '.join(failed)}. "
+                f"[error]✗ Failed services: {', '.join(failed)}. "
                 "Check logs with 'airpods logs'[/]"
             )
             raise typer.Exit(code=1)
 
         if timeout_services:
             console.print(
-                f"\n[warn]Timed out services: {', '.join(timeout_services)}. "
+                f"[warn]⏱ Timed out services: {', '.join(timeout_services)}. "
                 "Services may still be starting. Check with 'airpods status'[/]"
             )
 
         # Auto-import plugins into Open WebUI if service is healthy
-        if webui_specs and service_states.get("open-webui") == "healthy":
+        if webui_specs and "open-webui" in service_urls and "open-webui" not in failed_services:
             with status_spinner("Auto-importing plugins into Open WebUI"):
                 try:
                     plugins_dir = plugins.get_plugins_target_dir()
@@ -369,9 +341,9 @@ def register(app: typer.Typer) -> CommandMap:
                     )
                     if imported > 0:
                         console.print(
-                            f"[ok]✓[/] Auto-imported {imported} plugin(s) into Open WebUI"
+                            f"[ok]✓ Auto-imported {imported} plugin(s) into Open WebUI[/]"
                         )
-                    else:
+                    elif verbose:
                         console.print(
                             "[info]No new plugins to import (may already exist)[/]"
                         )
@@ -440,7 +412,7 @@ def _pull_images_only(specs: list[ServiceSpec], max_concurrent: int) -> None:
 
         return table
 
-    with Live(_make_table(), refresh_per_second=4, console=console) as live:
+    with Live(_make_table(), refresh_per_second=4, console=console, transient=True) as live:
 
         def _image_progress(phase, index, _total_count, spec):
             if phase == "start":

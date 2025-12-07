@@ -41,6 +41,12 @@ def _root_command(
         help="Show CLI version and exit.",
         is_eager=True,
     ),
+    verbose: bool = typer.Option(
+        False,
+        "-V",
+        "--verbose",
+        help="Show detailed output and progress information.",
+    ),
     help_: bool = typer.Option(
         False,
         "--help",
@@ -49,6 +55,10 @@ def _root_command(
         is_eager=True,
     ),
 ) -> None:
+    # Store verbose flag in context for subcommands
+    ctx.ensure_object(dict)
+    ctx.obj["verbose"] = verbose
+    
     if version:
         print_version()
         raise typer.Exit()

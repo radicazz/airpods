@@ -69,4 +69,5 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 - The paired `lint` job also targets `ubuntu-24.04`, installs UV, and validates that `python3 -m compileall airpods` can compile every module in the tree.
 - Run `uv run pytest` locally when making changes and keep formatting consistency with `uv format`.
 - Install `pre-commit` (part of the `dev` extras) and call `pre-commit run --all-files` before finishing your work; the hook runs `uv format`, Prettier checks on YAML/TOML/Markdown, the full pytest suite with coverage, and `python3 -m compileall airpods`, mirroring the CI jobs.
+- Before committing, bump the version in `pyproject.toml`: use minor version bumps for large features and patch bumps for everything else (bug fixes, small improvements, etc.).
 - Commit messages use lowercase prefixes such as `docs:`, `refactor:`, `feat:`, `fix:`, or `chore:` followed by a concise summary.

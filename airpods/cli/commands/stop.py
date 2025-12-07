@@ -5,9 +5,6 @@ from __future__ import annotations
 from typing import Optional
 
 import typer
-from rich.live import Live
-from rich.spinner import Spinner
-from rich.table import Table
 
 from airpods import ui
 from airpods.logging import console
@@ -16,6 +13,7 @@ from ..common import (
     COMMAND_CONTEXT,
     DEFAULT_STOP_TIMEOUT,
     ensure_podman_available,
+    is_verbose_mode,
     manager,
     resolve_services,
 )
@@ -46,7 +44,10 @@ def register(app: typer.Typer) -> CommandMap:
         specs = resolve_services(service)
         ensure_podman_available()
 
-        # Collect uptimes before stopping
+        # Check verbose mode from context
+        verbose = is_verbose_mode(ctx)
+
+        # Collect uptimes before stopping (only if verbose or needed for summary)
         uptimes: dict[str, str] = {}
         total_uptime_seconds = 0
         for spec in specs:
@@ -97,53 +98,54 @@ def register(app: typer.Typer) -> CommandMap:
                 console.print("[warn]Stop cancelled by user.[/]")
                 raise typer.Abort()
 
-        service_states: dict[str, str] = {spec.name: "stopping" for spec in specs}
+        # Simple log-based stopping process
+        stopped_services = []
+        not_found_services = []
 
-        def _make_table() -> Table:
-            """Create the live-updating status table."""
-            table = ui.themed_table(
-                title="[info]Stopping Services",
-            )
-            table.add_column("Service", style="cyan")
-            table.add_column("Uptime", justify="right")
-            table.add_column("Status", style="")
-
-            for spec in specs:
-                state = service_states[spec.name]
+        # Stop each service with simple logging
+        for spec in specs:
+            if verbose:
                 uptime = uptimes.get(spec.name, "-")
-                if state == "stopping":
-                    spinner = Spinner("dots", style="info")
-                    table.add_row(spec.name, uptime, spinner)
-                elif state == "stopped":
-                    table.add_row(spec.name, uptime, "[ok]✓ Stopped")
-                elif state == "removed":
-                    table.add_row(spec.name, uptime, "[ok]✓ Removed")
-                elif state == "not_found":
-                    table.add_row(spec.name, uptime, "[warn]⊘ Not found")
+                console.print(f"Stopping [accent]{spec.name}[/] (uptime: {uptime})...")
+            else:
+                console.print(f"Stopping [accent]{spec.name}[/]...")
+            
+            existed = manager.stop_service(spec, remove=remove, timeout=timeout)
+            if not existed:
+                not_found_services.append(spec.name)
+                if verbose:
+                    console.print(f"[warn]⊘ {spec.name} not found[/]")
+            else:
+                stopped_services.append(spec.name)
+                if verbose:
+                    action = "removed" if remove else "stopped"
+                    console.print(f"[ok]✓ {spec.name} {action}[/]")
 
-            return table
+        # Calculate counts for summary
+        stopped_count = len(stopped_services)
+        not_found_count = len(not_found_services)
 
-        with Live(_make_table(), refresh_per_second=4, console=console) as live:
-            for spec in specs:
-                existed = manager.stop_service(spec, remove=remove, timeout=timeout)
-                if not existed:
-                    service_states[spec.name] = "not_found"
-                elif remove:
-                    service_states[spec.name] = "removed"
-                else:
-                    service_states[spec.name] = "stopped"
-                live.update(_make_table())
+        action = "Removed" if remove else "Stopped"
+        if stopped_count > 0:
+            total_uptime_display = ""
+            if total_uptime_seconds > 0:
+                from airpods.cli.status_view import _format_uptime
+                from datetime import datetime
 
-        # Show total uptime summary
-        if total_uptime_seconds > 0:
-            from airpods.cli.status_view import _format_uptime
+                fake_start = datetime.now().timestamp() - total_uptime_seconds
+                fake_str = datetime.fromtimestamp(fake_start).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+                total_display = _format_uptime(fake_str + " -0500 EST")
+                total_uptime_display = f" • Total uptime: [accent]{total_display}[/]"
 
-            # Create a fake timestamp for formatting
-            from datetime import datetime
+            console.print(
+                f"[ok]✓ {action} {stopped_count} service{'s' if stopped_count != 1 else ''}{total_uptime_display}[/]"
+            )
 
-            fake_start = datetime.now().timestamp() - total_uptime_seconds
-            fake_str = datetime.fromtimestamp(fake_start).strftime("%Y-%m-%d %H:%M:%S")
-            total_display = _format_uptime(fake_str + " -0500 EST")
-            console.print(f"\nTotal uptime: [accent]{total_display}[/]")
+        if not_found_count > 0:
+            console.print(
+                f"[warn]⊘ {not_found_count} service{'s' if not_found_count != 1 else ''} not found[/]"
+            )
 
     return {"stop": stop}

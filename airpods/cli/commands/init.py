@@ -93,7 +93,7 @@ def register(app: typer.Typer) -> CommandMap:
 
             return table
 
-        with Live(_make_table(), refresh_per_second=4, console=console) as live:
+        with Live(_make_table(), refresh_per_second=4, console=console, transient=True) as live:
 
             def _image_progress(phase, index, _total_count, spec):
                 if phase == "start":
@@ -110,6 +110,10 @@ def register(app: typer.Typer) -> CommandMap:
                 if size:
                     image_sizes[spec.name] = size
             live.update(_make_table())
+
+        # Show clean completion summary for image pulls
+        if specs:
+            console.print(f"[ok]✓ Pulled {len(specs)} image{'s' if len(specs) != 1 else ''}[/]")
 
         with status_spinner("Preparing Open WebUI secret"):
             secret = state.ensure_webui_secret()

@@ -115,16 +115,20 @@ def print_version() -> None:
     console.print(f"[bold]airpods[/bold] [accent]v{__version__}[/]")
 
 
-def print_network_status(created: bool, network_name: str) -> None:
-    """Display network creation or reuse status."""
+def print_network_status(created: bool, network_name: str, verbose: bool = True) -> None:
+    """Display network creation or reuse status, respecting verbose mode."""
+    if not verbose:
+        return
     if created:
         console.print(f"Network [accent]{network_name}[/]: [ok]✓ created[/]")
     else:
         console.print(f"Network [accent]{network_name}[/]: [ok]✓ exists[/]")
 
 
-def print_volume_status(results: list[VolumeEnsureResult]) -> None:
-    """Display volume creation or reuse status for multiple volumes."""
+def print_volume_status(results: list[VolumeEnsureResult], verbose: bool = True) -> None:
+    """Display volume creation or reuse status for multiple volumes, respecting verbose mode."""
+    if not verbose:
+        return
     ordered = [r for r in results if r.kind == "volume"] + [
         r for r in results if r.kind == "bind"
     ]
@@ -134,6 +138,23 @@ def print_volume_status(results: list[VolumeEnsureResult]) -> None:
             console.print(f"{label} [accent]{result.source}[/]: [ok]✓ created[/]")
         else:
             console.print(f"{label} [accent]{result.source}[/]: [ok]✓ exists[/]")
+
+
+def print_config_info(config_path: str | None, verbose: bool = True) -> None:
+    """Print config information, with simpler output in non-verbose mode."""
+    if config_path:
+        if verbose:
+            console.print(f"[info]Config file: {config_path}")
+        else:
+            console.print(f"Using config: [accent]{config_path}[/]")
+    else:
+        if verbose:
+            console.print("[warn]No config file found; using built-in defaults.[/]")
+
+
+def is_verbose_mode(ctx: typer.Context) -> bool:
+    """Check if verbose mode is enabled from context."""
+    return ctx.obj and ctx.obj.get("verbose", False)
 
 
 _SIZE_PATTERN = re.compile(
