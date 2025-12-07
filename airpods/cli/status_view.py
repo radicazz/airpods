@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from airpods import ui
+from airpods.configuration import get_config
 from airpods.logging import console
 from airpods.services import ServiceSpec
 
@@ -68,6 +69,22 @@ def render_status(specs: List[ServiceSpec]) -> None:
     pod_rows = manager.pod_status_rows()
     if pod_rows is None:
         pod_rows = {}
+    
+    # Check if gateway is enabled and running
+    config = get_config()
+    gateway_enabled = "gateway" in config.services and config.services["gateway"].enabled
+    gateway_spec = next((s for s in specs if s.name == "gateway"), None)
+    gateway_running = False
+    gateway_port = None
+    
+    if gateway_enabled and gateway_spec:
+        gateway_row = pod_rows.get(gateway_spec.pod)
+        if gateway_row and gateway_row.get("Status") == "Running":
+            gateway_running = True
+            gateway_port_bindings = manager.service_ports(gateway_spec)
+            gateway_host_ports = collect_host_ports(gateway_spec, gateway_port_bindings)
+            gateway_port = gateway_host_ports[0] if gateway_host_ports else 8080
+    
     table = ui.themed_table(title="[accent]Pods[/accent]")
     table.add_column("Service")
     table.add_column("Status")
@@ -110,7 +127,20 @@ def render_status(specs: List[ServiceSpec]) -> None:
             host_ports = collect_host_ports(spec, port_bindings)
             host_port = host_ports[0] if host_ports else None
             health = ping_service(spec, host_port)
-            url_text = ", ".join(format_host_urls(host_ports)) if host_ports else "-"
+            
+            # Gateway-aware URL display
+            if spec.name == "gateway":
+                # Gateway service shows its own URL
+                url_text = ", ".join(format_host_urls(host_ports)) if host_ports else "-"
+            elif gateway_running and spec.name in ["open-webui", "ollama"]:
+                # Services behind gateway show gateway URL with note
+                url_text = f"http://localhost:{gateway_port} [dim](via gateway)[/dim]"
+            elif host_ports:
+                # Direct service access
+                url_text = ", ".join(format_host_urls(host_ports))
+            else:
+                url_text = "-"
+                
             table.add_row(spec.name, health, uptime, url_text)
         elif status == "Exited":
             port_bindings = manager.service_ports(spec)
@@ -119,7 +149,15 @@ def render_status(specs: List[ServiceSpec]) -> None:
         else:
             table.add_row(spec.name, f"[warn]{status}", uptime, "-")
 
-    console.print(table)
+    # Add gateway info note if enabled
+    if gateway_enabled and gateway_running:
+        console.print(table)
+        console.print(f"\n[dim]Gateway enabled: Open WebUI and Ollama accessible via http://localhost:{gateway_port}[/dim]")
+    elif gateway_enabled:
+        console.print(table)
+        console.print(f"\n[dim]Gateway configured but not running[/dim]")
+    else:
+        console.print(table)
 
 
 def collect_host_ports(spec: ServiceSpec, port_bindings: dict[str, Any]) -> List[int]:

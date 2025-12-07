@@ -118,6 +118,12 @@ def load_config() -> AirpodsConfig:
 _CONFIG_INSTANCE: Optional[AirpodsConfig] = None
 
 
+def set_config_instance(config: AirpodsConfig) -> None:
+    """Manually set the cached configuration instance."""
+    global _CONFIG_INSTANCE
+    _CONFIG_INSTANCE = config
+
+
 def get_config() -> AirpodsConfig:
     """Get the cached configuration object."""
     global _CONFIG_INSTANCE

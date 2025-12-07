@@ -11,6 +11,7 @@ from rich.spinner import Spinner
 from rich.table import Table
 
 from airpods import plugins, state, ui
+from airpods.configuration import load_config
 from airpods.logging import console, status_spinner
 from airpods.system import detect_gpu
 from airpods.services import ServiceSpec
@@ -22,6 +23,7 @@ from ..common import (
     ensure_podman_available,
     format_transfer_label,
     manager,
+    override_cli_config,
     print_network_status,
     print_volume_status,
     refresh_cli_context,
@@ -51,6 +53,22 @@ def register(app: typer.Typer) -> CommandMap:
             "--init",
             "-i",
             help="Only run dependency checks, resource creation, and image pulls without starting services.",
+        ),
+        mode: str = typer.Argument(
+            "dev",
+            metavar="[MODE]",
+            show_default=False,
+            help="Start mode: 'dev' (default) or 'prod'.",
+        ),
+        gateway: bool = typer.Option(
+            False,
+            "--gateway",
+            help="Force-enable the gateway (useful in dev mode).",
+        ),
+        no_gateway: bool = typer.Option(
+            False,
+            "--no-gateway",
+            help="Force-disable the gateway (even in prod mode).",
         ),
     ) -> None:
         """Start pods for specified services."""
@@ -87,10 +105,17 @@ def register(app: typer.Typer) -> CommandMap:
         else:
             console.print("[warn]No config file found; using built-in defaults.[/]")
 
+        mode = mode.lower()
+        if mode not in {"dev", "prod"}:
+            console.print("[error]Invalid mode. Choose 'dev' or 'prod'.[/]")
+            raise typer.Exit(code=1)
+
+        applied_config = _apply_mode_overrides(mode, gateway, no_gateway)
         specs = resolve_services(service)
         ensure_podman_available()
 
         if init_only:
+            console.print("[warn]Warning: 'start --init' is deprecated. Use 'airpods --init' instead.[/]")
             _run_init_mode(specs)
             return
 
@@ -512,3 +537,40 @@ def _pull_images_only(specs: list[ServiceSpec]) -> None:
 
         manager.pull_images(specs, progress_callback=_image_progress)
         live.update(_make_table())
+
+
+def _apply_mode_overrides(mode: str, gateway_flag: bool, no_gateway_flag: bool):
+    """Apply dev/prod mode overrides to the active configuration."""
+    config = load_config()
+
+    if gateway_flag and no_gateway_flag:
+        console.print(
+            "[warn]Both --gateway and --no-gateway provided; --no-gateway wins.[/]"
+        )
+
+    if no_gateway_flag:
+        desired_gateway = False
+    elif gateway_flag:
+        desired_gateway = True
+    else:
+        desired_gateway = mode == "prod"
+
+    if "gateway" in config.services:
+        config.services["gateway"].enabled = desired_gateway
+
+    if desired_gateway:
+        if "open-webui" in config.services:
+            config.services["open-webui"].ports = []
+        if "ollama" in config.services:
+            config.services["ollama"].ports = []
+    else:
+        defaults = load_config()
+        if "open-webui" in defaults.services and "open-webui" in config.services:
+            config.services["open-webui"].ports = defaults.services[
+                "open-webui"
+            ].ports
+        if "ollama" in defaults.services and "ollama" in config.services:
+            config.services["ollama"].ports = defaults.services["ollama"].ports
+
+    override_cli_config(config)
+    return config

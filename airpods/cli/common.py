@@ -8,6 +8,8 @@ import typer
 from airpods import __version__
 import airpods.config as config_module
 from airpods.configuration import get_config, reload_config
+from airpods.configuration.loader import set_config_instance
+from airpods.configuration.schema import AirpodsConfig
 from airpods.logging import console
 from airpods.runtime import ContainerRuntimeError, get_runtime
 from airpods.services import (
@@ -65,6 +67,14 @@ def _apply_cli_config(config) -> None:
 
 
 _apply_cli_config(get_config())
+
+
+def override_cli_config(config: AirpodsConfig) -> None:
+    """Apply the given config to the CLI runtime without reading from disk."""
+    set_config_instance(config)
+    config_module.reload_registry(config)
+    _apply_cli_config(config)
+
 
 DOCTOR_REMEDIATIONS = {
     "podman": "Install Podman: https://podman.io/docs/installation",

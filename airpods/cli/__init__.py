@@ -10,6 +10,7 @@ from airpods.logging import console
 from airpods.runtime import ContainerRuntimeError
 
 from .commands import register as register_commands
+from .commands.start import _run_init_mode
 from .common import (
     DEFAULT_LOG_LINES,
     DEFAULT_PING_TIMEOUT,
@@ -48,12 +49,21 @@ def _root_command(
         help="Show this message and exit.",
         is_eager=True,
     ),
+    init: bool = typer.Option(
+        False,
+        "--init",
+        "-i",
+        help="Verify tools, ensure resources, and report whether anything new was created.",
+    ),
 ) -> None:
     if version:
         print_version()
         raise typer.Exit()
     if help_:
         show_root_help(ctx)
+        raise typer.Exit()
+    if init:
+        _run_init_mode(resolve_services(None))
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
         show_root_help(ctx)
