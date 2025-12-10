@@ -1,6 +1,6 @@
 # airpods
 
-[![Tests](https://github.com/radicazz/airpods/actions/workflows/test.yml/badge.svg)](https://github.com/radicazz/airpods/actions/workflows/test.yml)
+[![Tests](https://github.com/radicazz/airpods/actions/workflows/test.yml/badge.svg)](https://github.com/radicazz/airpods/actions/workflows/test.yml) [![Coverage](https://codecov.io/gh/radicazz/airpods/graph/badge.svg)](https://codecov.io/gh/radicazz/airpods)
 
 User-friendly CLI for orchestrating local AI services with Podman.
 
@@ -13,8 +13,9 @@ User-friendly CLI for orchestrating local AI services with Podman.
 ## Installation
 
 ```bash
-# Development setup
 git clone https://github.com/radicazz/airpods.git && cd airpods
+
+# Local (project folder) installation
 uv venv && source .venv/bin/activate
 uv pip install -e . '.[dev]'
 
@@ -36,20 +37,6 @@ airpods status
 
 # Stop services
 airpods stop
-
-# Clean up everything (back up data first!)
-airpods backup --dest ~/backups
-airpods clean --all
-```
-
-## Back up / restore state
-
-```bash
-# Capture configs, Open WebUI DB, plugins, and Ollama metadata (no GGUF blobs)
-airpods backup --dest ~/backups
-
-# Restore into fresh volumes, keeping current configs backed up automatically
-airpods restore ~/backups/airpods-backup-20250712.tar.gz
 ```
 
 Run `airpods --help` for all available commands and options.
