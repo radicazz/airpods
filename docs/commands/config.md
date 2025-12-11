@@ -82,7 +82,7 @@ Airpods searches for configuration in this order:
 **Note:** All airpods configuration files (including `config.toml` and `webui_secret`) are now stored in the `configs/` subdirectory for better organization. Legacy locations are still supported for backwards compatibility.
 
 > [!TIP]
-> `airpods start --init` (and regular `airpods start`) automatically bootstraps the default `config.toml` at the first writable path in the list above and reloads the CLI so the new file is in effect immediately. Whichever directory hosts that config becomes the Airpods “home”: the CLI stores `configs/`, `volumes/`, webui secrets, and other runtime data alongside each other under that directory so everything stays grouped together.
+> `airpods start` (with or without `--pre-fetch`) automatically bootstraps the default `config.toml` at the first writable path in the list above and reloads the CLI so the new file is in effect immediately. Whichever directory hosts that config becomes the Airpods “home”: the CLI stores `configs/`, `volumes/`, webui secrets, and other runtime data alongside each other under that directory so everything stays grouped together.
 
 ## Template Variables
 

@@ -10,7 +10,7 @@
 
 ## Role In The Stack
 
-- Runs as a service (`comfyui`) managed by `start/stop/status/logs` (with `start --init` covering initialization), attached to the same user-defined Podman network as Ollama, Open WebUI, and llama.cpp.
+- Runs as a service (`comfyui`) managed by `start/stop/status/logs` (with `start --pre-fetch` available for ahead-of-time image pulls), attached to the same user-defined Podman network as Ollama, Open WebUI, and llama.cpp.
 - Serves two surfaces:
   - **Frontend UI** for interactive graph editing and execution.
   - **Backend API**: HTTP queue + websocket status/preview channels for programmatic workflow submission.

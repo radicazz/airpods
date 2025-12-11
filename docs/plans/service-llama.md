@@ -10,7 +10,7 @@
 
 ## Role In The Stack
 
-- Runs as an additional Podman-managed service that airpods can `start`, `stop`, `status`, and `logs` (with `start --init` covering bootstrap flows), just like Ollama and Open WebUI.
+- Runs as an additional Podman-managed service that airpods can `start`, `stop`, `status`, and `logs` (with `start --pre-fetch` available for warming images), just like Ollama and Open WebUI.
 - Exposes an OpenAI-compatible HTTP API (via `llama-server`) that Open WebUI can use as a backend through its OpenAI connection settings.
 - Optionally exposes the native llama.cpp WebUI (SvelteKit-based) for lightweight, local-only chat and model management.
 - Stores GGUF models on a dedicated volume so they persist across container restarts and can be reused by different llama.cpp instances.
@@ -68,8 +68,8 @@ The private plan proposes extending the service schema to support these `command
   - llama.cpp adds another local model backend that airpods can manage via Podman, alongside Ollama and future runtimes.
   - Airpods remains a thin, focused CLI; llama.cpp provides the inference engine and, optionally, its own UI.
 - Works with the existing lifecycle model:
-  - `start --init` can create the llama.cpp model volume(s) and pull images as part of dependency setup.
-  - `start` brings up the llama.cpp pods/containers, waits for their HTTP health checks, and reports readiness.
+  - `start` creates the llama.cpp model volume(s), pulls images, brings up the pods/containers, waits for their HTTP health checks, and reports readiness.
+  - `start --pre-fetch` can warm caches by downloading llama.cpp images without starting containers.
   - `stop` shuts down pods cleanly while preserving model volumes.
   - `status` shows each llama-related service (backend and optional UI) with basic HTTP health and URLs.
   - `logs` tails the llama.cpp containers for debugging or monitoring model loads and requests.

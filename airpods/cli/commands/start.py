@@ -10,7 +10,7 @@ from rich.live import Live
 from rich.spinner import Spinner
 from rich.table import Table
 
-from airpods import state, ui
+from airpods import ui
 from airpods.logging import console, status_spinner
 from airpods.system import detect_gpu, detect_cuda_compute_capability
 from airpods.cuda import select_cuda_version, get_cuda_info_display
@@ -50,16 +50,15 @@ def register(app: typer.Typer) -> CommandMap:
         force_cpu: bool = typer.Option(
             False, "--cpu", help="Force CPU even if GPU is present."
         ),
-        init_only: bool = typer.Option(
-            False,
-            "--init",
-            "-i",
-            help="Only run dependency checks, resource creation, and image pulls without starting services.",
-        ),
         sequential: bool = typer.Option(
             False,
             "--sequential",
             help="Pull images sequentially (overrides cli.max_concurrent_pulls).",
+        ),
+        pre_fetch: bool = typer.Option(
+            False,
+            "--pre-fetch",
+            help="Download service images without starting containers.",
         ),
     ) -> None:
         """Start pods for specified services."""
@@ -107,8 +106,8 @@ def register(app: typer.Typer) -> CommandMap:
         cli_config = get_cli_config()
         max_concurrent_pulls = 1 if sequential else cli_config.max_concurrent_pulls
 
-        if init_only:
-            _run_init_mode(specs, max_concurrent_pulls)
+        if pre_fetch:
+            _pull_images_only(specs, max_concurrent=max_concurrent_pulls)
             return
 
         if not specs:
@@ -364,33 +363,6 @@ def register(app: typer.Typer) -> CommandMap:
                     )
 
     return {"start": start}
-
-
-def _run_init_mode(specs: list[ServiceSpec], max_concurrent: int) -> None:
-    report = manager.report_environment()
-    ui.show_environment(report)
-
-    if report.missing:
-        console.print(
-            f"[error]The following dependencies are required: {', '.join(report.missing)}. Install them and re-run with --init.[/]"
-        )
-        raise typer.Exit(code=1)
-
-    with status_spinner("Ensuring network"):
-        network_created = manager.ensure_network()
-    print_network_status(network_created, manager.network_name)
-
-    with status_spinner("Ensuring volumes"):
-        volume_results = manager.ensure_volumes(specs)
-    print_volume_status(volume_results)
-
-    _pull_images_only(specs, max_concurrent=max_concurrent)
-
-    with status_spinner("Preparing Open WebUI secret"):
-        state.ensure_webui_secret()
-    console.print(f"[info]Open WebUI secret stored at {state.webui_secret_path()}[/]")
-
-    ui.success_panel("init complete. pods are ready to start.")
 
 
 def _pull_images_only(specs: list[ServiceSpec], max_concurrent: int) -> None:

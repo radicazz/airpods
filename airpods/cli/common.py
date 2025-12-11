@@ -81,8 +81,10 @@ DOCTOR_REMEDIATIONS = {
 
 COMMAND_ALIASES = {
     "up": "start",
+    "run": "start",
     "down": "stop",
     "ps": "status",
+    "info": "status",
 }
 
 ALIAS_HELP_TEMPLATE = "[alias]Alias for {canonical}[/]"

@@ -92,6 +92,4 @@ def test_template_resolver_handles_mixed_runtime_and_service_refs():
         resolved.services["open-webui"].env["OLLAMA_BASE_URL"]
         == "http://gateway.local:11434"
     )
-    assert (
-        resolved.services["ollama"].env["PUBLIC_URL"] == "http://localhost:3000"
-    )
+    assert resolved.services["ollama"].env["PUBLIC_URL"] == "http://localhost:3000"

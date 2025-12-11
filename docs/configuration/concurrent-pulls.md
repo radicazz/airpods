@@ -1,6 +1,6 @@
 # docs/configuration/concurrent-pulls
 
-Airpods can now download multiple container images in parallel when running `airpods start` or `airpods start --init`. This reduces wait times on first boot and when refreshing large images like ComfyUI.
+Airpods can now download multiple container images in parallel when running `airpods start` or `airpods start --pre-fetch`. This reduces wait times on first boot and when refreshing large images like ComfyUI.
 
 ## Configuration
 
@@ -21,12 +21,12 @@ Use `--sequential` to force one-at-a-time downloads regardless of config:
 airpods start --sequential
 ```
 
-The flag also works with `airpods start --init`.
+The flag also works with `airpods start --pre-fetch`.
 
 ## Behavior
 
 - The unified Rich table now tracks each service’s pull progress independently.
-- GPU/volume/network preparation occurs before downloads begin, just like before.
+- During a full `airpods start`, GPU/volume/network preparation occurs before downloads begin; `airpods start --pre-fetch` skips those steps and only downloads images.
 - If one pull fails, the CLI reports the failure but allows other image pulls to finish.
 
 ## Tips

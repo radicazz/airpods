@@ -10,7 +10,7 @@
 
 ## Role In The Stack
 
-- Runs as an optional Podman service (`open-webui`) managed by `start/stop/status/logs` (with `start --init` for dependency prep).
+- Runs as an optional Podman service (`open-webui`) managed by `start/stop/status/logs` (with `start --pre-fetch` available for pre-downloading images).
 - Serves the chat UI and admin panel; it is the only host-facing service by default. When the gateway is enabled, it sits behind Caddy on a single port; otherwise it can bind directly to the host.
 - Plugins (Tools, Functions, Pipelines) execute inside Open WebUI’s Python runtime and can call other services on the Podman network (`host.containers.internal`, network aliases) or the public internet, depending on configuration.
 - Best suited as the “integration surface” where user actions and LLM calls can reach other managed services without modifying the airpods CLI.
@@ -53,7 +53,7 @@
 
 ## Implementation Reminders (non-binding)
 
-- Keep Open WebUI service optional and configuration-driven; do not bake plugin installs into `airpods start --init`/`airpods start`.
+- Keep Open WebUI service optional and configuration-driven; do not bake plugin installs into `airpods start --pre-fetch`/`airpods start`.
 - Provide network aliases and port info in status output so plugin authors know the internal endpoints to call.
 - Document a safe default: gateway on (internal Open WebUI) + optional Basic Auth; Open WebUI’s own auth remains primary for user accounts.
 - Avoid auto-mounting arbitrary plugin directories by default; let admins opt in to custom plugin mounts if needed.

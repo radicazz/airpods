@@ -26,8 +26,8 @@ uv tool install --from . airpods
 ## Quick Start
 
 ```bash
-# Prefetch images & create volumes
-airpods start --init
+# (Optional) prefetch images
+airpods start --pre-fetch
 
 # Start services
 airpods start
