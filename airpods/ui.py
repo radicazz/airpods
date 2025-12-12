@@ -54,7 +54,7 @@ def themed_panel(
     text_style: str | None = None,
 ) -> Panel:
     """Return a Rich Panel styled with the shared palette."""
-    return Panel(message, border_style=border_color, style=text_style or PALETTE["fg"])
+    return Panel.fit(message, border_style=border_color, style=text_style or PALETTE["fg"])
 
 
 def show_environment(report: EnvironmentReport) -> None:

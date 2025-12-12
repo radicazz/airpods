@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import uuid
 from typing import Any, Callable, Optional
 
 import requests
@@ -218,11 +219,7 @@ def format_time_ago(timestamp_str: str) -> str:
     try:
         from datetime import datetime, timezone
 
-        # Parse the timestamp (handle both with and without microseconds)
-        if "." in timestamp_str:
-            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-        else:
-            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
 
         now = datetime.now(timezone.utc)
         delta = now - timestamp
@@ -524,7 +521,9 @@ def pull_from_huggingface(
         if progress_callback:
             progress_callback("import", 0, 100)
 
-        remote_model_path = "/tmp/model.gguf"
+        # Use unique filename to avoid race conditions with concurrent imports
+        unique_id = uuid.uuid4().hex
+        remote_model_path = f"/tmp/model-{unique_id}.gguf"
         modelfile_content = f"FROM {remote_model_path}\n"
 
         # Copy GGUF file into the container
