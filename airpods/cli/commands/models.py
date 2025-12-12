@@ -98,6 +98,83 @@ def list_models_cmd(
         raise typer.Exit(1)
 
 
+@models_app.command(name="pull", context_settings=COMMAND_CONTEXT)
+def pull_model_cmd(
+    model: str = typer.Argument(..., help="Model name (e.g., llama3.2, qwen2.5:7b)"),
+    help_: bool = command_help_option(),
+) -> None:
+    """Pull a model from the Ollama library."""
+    
+    port = ensure_ollama_running()
+    
+    try:
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+        import time
+        
+        console.print(f"Pulling [accent]{model}[/]...")
+        
+        # Track progress
+        total_size = 0
+        completed = 0
+        last_status = ""
+        start_time = time.time()
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console,
+        ) as progress:
+            task = progress.add_task(f"Downloading {model}", total=100)
+            
+            def update_progress(data: dict) -> None:
+                nonlocal total_size, completed, last_status
+                
+                status = data.get("status", "")
+                
+                # Update total if we receive it
+                if "total" in data and data["total"]:
+                    total_size = data["total"]
+                
+                # Update completed if we receive it
+                if "completed" in data and data["completed"]:
+                    completed = data["completed"]
+                
+                # Calculate percentage
+                if total_size > 0:
+                    percent = (completed / total_size) * 100
+                    progress.update(task, completed=percent)
+                    
+                    # Update description with status
+                    if status and status != last_status:
+                        progress.update(task, description=f"{status}")
+                        last_status = status
+        
+            ollama.pull_model(model, port, progress_callback=update_progress)
+        
+        # Get final model info
+        try:
+            info = ollama.show_model(model, port)
+            model_size = info.get("size", 0) if isinstance(info, dict) else 0
+        except Exception:
+            model_size = 0
+        
+        elapsed = time.time() - start_time
+        size_str = ollama.format_size(model_size) if model_size else ""
+        
+        if size_str:
+            console.print(
+                f"[ok]✓ Model {model} ready ({size_str}, {elapsed:.1f}s)[/]"
+            )
+        else:
+            console.print(f"[ok]✓ Model {model} ready ({elapsed:.1f}s)[/]")
+        
+    except ollama.OllamaAPIError as e:
+        console.print(f"[error]Failed to pull model: {e}[/]")
+        raise typer.Exit(1)
+
+
 def register(app: typer.Typer) -> CommandMap:
     """Register the models command and its subcommands."""
     app.add_typer(models_app, name="models")
