@@ -279,6 +279,110 @@ def pull_hf_cmd(
         raise typer.Exit(1)
 
 
+@models_app.command(name="remove", context_settings=COMMAND_CONTEXT)
+def remove_model_cmd(
+    model: str = typer.Argument(..., help="Model name to remove"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    help_: bool = command_help_option(),
+) -> None:
+    """Remove an installed model."""
+    
+    port = ensure_ollama_running()
+    
+    try:
+        # Verify model exists
+        models_list = ollama.list_models(port)
+        if not any(m.get("name") == model for m in models_list):
+            console.print(f"[error]Model '{model}' not found[/]")
+            raise typer.Exit(1)
+        
+        # Confirm deletion unless --force
+        if not force:
+            confirm = typer.confirm(f"Remove model '{model}'?", default=False)
+            if not confirm:
+                console.print("[info]Cancelled[/]")
+                return
+        
+        # Delete the model
+        ollama.delete_model(model, port)
+        console.print(f"[ok]✓ Model {model} removed[/]")
+        
+    except ollama.OllamaAPIError as e:
+        console.print(f"[error]Failed to remove model: {e}[/]")
+        raise typer.Exit(1)
+
+
+@models_app.command(name="info", context_settings=COMMAND_CONTEXT)
+def info_model_cmd(
+    model: str = typer.Argument(..., help="Model name"),
+    help_: bool = command_help_option(),
+) -> None:
+    """Show detailed information about a model."""
+    
+    port = ensure_ollama_running()
+    
+    try:
+        info = ollama.show_model(model, port)
+        
+        # Display model information
+        from rich.panel import Panel
+        from rich.text import Text
+        
+        # Build info text
+        info_lines = []
+        info_lines.append(f"[bold]Model:[/bold] {model}")
+        
+        # Show license if available
+        if "license" in info:
+            info_lines.append(f"[bold]License:[/bold] {info['license']}")
+        
+        # Show family if available
+        if "details" in info and isinstance(info["details"], dict):
+            details = info["details"]
+            if "family" in details:
+                info_lines.append(f"[bold]Family:[/bold] {details['family']}")
+            if "parameter_size" in details:
+                info_lines.append(f"[bold]Parameters:[/bold] {details['parameter_size']}")
+            if "quantization_level" in details:
+                info_lines.append(f"[bold]Quantization:[/bold] {details['quantization_level']}")
+        
+        # Show size if available
+        if "size" in info:
+            size_str = ollama.format_size(info["size"])
+            info_lines.append(f"[bold]Size:[/bold] {size_str}")
+        
+        # Show modelfile
+        if "modelfile" in info:
+            info_lines.append(f"\n[bold]Modelfile:[/bold]")
+            info_lines.append(f"[dim]{info['modelfile']}[/dim]")
+        
+        # Show parameters
+        if "parameters" in info:
+            info_lines.append(f"\n[bold]Parameters:[/bold]")
+            info_lines.append(f"[dim]{info['parameters']}[/dim]")
+        
+        # Show template if available
+        if "template" in info:
+            info_lines.append(f"\n[bold]Template:[/bold]")
+            # Truncate long templates
+            template = info["template"]
+            if len(template) > 200:
+                template = template[:200] + "..."
+            info_lines.append(f"[dim]{template}[/dim]")
+        
+        panel = Panel(
+            "\n".join(info_lines),
+            title=f"[info]Model Information[/]",
+            border_style="cyan",
+        )
+        
+        console.print(panel)
+        
+    except ollama.OllamaAPIError as e:
+        console.print(f"[error]Failed to get model info: {e}[/]")
+        raise typer.Exit(1)
+
+
 def register(app: typer.Typer) -> CommandMap:
     """Register the models command and its subcommands."""
     app.add_typer(models_app, name="models")
