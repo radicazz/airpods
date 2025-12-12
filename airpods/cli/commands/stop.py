@@ -101,16 +101,63 @@ def register(app: typer.Typer) -> CommandMap:
         # Simple log-based stopping process
         stopped_services = []
         not_found_services = []
+        already_stopped_services: list[str] = []
+
+        pod_rows = manager.pod_status_rows() or {}
+
+        def _is_pod_running(pod_name: str) -> bool:
+            row = pod_rows.get(pod_name) or {}
+            status = str(row.get("Status", "")).lower()
+            return status.startswith("running")
 
         # Stop each service with simple logging
         for spec in specs:
+            pod_exists = manager.runtime.pod_exists(spec.pod)
+            is_running = _is_pod_running(spec.pod)
+
+            if remove:
+                if not pod_exists:
+                    not_found_services.append(spec.name)
+                    if verbose:
+                        console.print(f"[warn]⊘ {spec.name} not found[/]")
+                    continue
+
+                if is_running:
+                    if verbose:
+                        uptime = uptimes.get(spec.name, "-")
+                        console.print(
+                            f"Stopping [accent]{spec.name}[/] (uptime: {uptime})..."
+                        )
+                    else:
+                        console.print(f"Stopping [accent]{spec.name}[/]...")
+                else:
+                    console.print(f"Removing [accent]{spec.name}[/]...")
+
+                manager.stop_service(spec, remove=True, timeout=timeout)
+                stopped_services.append(spec.name)
+                if verbose:
+                    console.print(f"[ok]✓ {spec.name} removed[/]")
+                continue
+
+            # remove == False
+            if not is_running:
+                if not pod_exists:
+                    not_found_services.append(spec.name)
+                    if verbose:
+                        console.print(f"[warn]⊘ {spec.name} not found[/]")
+                else:
+                    already_stopped_services.append(spec.name)
+                    if verbose:
+                        console.print(f"[info]⊘ {spec.name} already stopped[/]")
+                continue
+
             if verbose:
                 uptime = uptimes.get(spec.name, "-")
                 console.print(f"Stopping [accent]{spec.name}[/] (uptime: {uptime})...")
             else:
                 console.print(f"Stopping [accent]{spec.name}[/]...")
 
-            existed = manager.stop_service(spec, remove=remove, timeout=timeout)
+            existed = manager.stop_service(spec, remove=False, timeout=timeout)
             if not existed:
                 not_found_services.append(spec.name)
                 if verbose:
@@ -118,12 +165,12 @@ def register(app: typer.Typer) -> CommandMap:
             else:
                 stopped_services.append(spec.name)
                 if verbose:
-                    action = "removed" if remove else "stopped"
-                    console.print(f"[ok]✓ {spec.name} {action}[/]")
+                    console.print(f"[ok]✓ {spec.name} stopped[/]")
 
         # Calculate counts for summary
         stopped_count = len(stopped_services)
         not_found_count = len(not_found_services)
+        already_stopped_count = len(already_stopped_services)
 
         action = "Removed" if remove else "Stopped"
         if stopped_count > 0:
@@ -146,6 +193,10 @@ def register(app: typer.Typer) -> CommandMap:
         if not_found_count > 0:
             console.print(
                 f"[warn]⊘ {not_found_count} service{'s' if not_found_count != 1 else ''} not found[/]"
+            )
+        if already_stopped_count > 0 and not remove:
+            console.print(
+                f"[info]⊘ {already_stopped_count} service{'s' if already_stopped_count != 1 else ''} already stopped[/]"
             )
 
     return {"stop": stop}

@@ -113,7 +113,9 @@ def test_list_installed_plugins_discovers_nested_filters(
     assert plugins.list_installed_plugins() == ["filters.omega"]
 
 
-def test_resolve_plugin_owner_auto_prefers_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_plugin_owner_auto_prefers_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[list[str]] = []
 
     class DummyResult:
@@ -138,7 +140,9 @@ def test_resolve_plugin_owner_auto_prefers_admin(monkeypatch: pytest.MonkeyPatch
     assert len(calls) == 1
 
 
-def test_resolve_plugin_owner_auto_falls_back_to_airpods(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_plugin_owner_auto_falls_back_to_airpods(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class DummyResult:
         returncode = 0
         stderr = ""

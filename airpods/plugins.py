@@ -282,9 +282,7 @@ finally:
     return owner_id or None
 
 
-def resolve_plugin_owner_user_id(
-    container_name: str, mode: str = "auto"
-) -> str:
+def resolve_plugin_owner_user_id(container_name: str, mode: str = "auto") -> str:
     """Resolve which WebUI user id should own imported plugins.
 
     - auto: use an existing admin if possible, else ensure airpods-system owner.
