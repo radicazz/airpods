@@ -66,10 +66,7 @@ def list_models_cmd(
 
         if not models_list:
             console.print("[info]No models installed[/]")
-            console.print(
-                "Pull a model with 'airpods models pull <model>' or "
-                "'airpods models pull-hf <repo>'"
-            )
+            console.print("Pull a model with 'airpods models pull <model>'")
             console.print(
                 "\n[dim]Browse models:[/dim]\n"
                 "  [dim]• Ollama library: [link=https://ollama.com/library]https://ollama.com/library[/link][/dim]\n"
@@ -354,33 +351,6 @@ def _pull_from_huggingface(
     except ollama.OllamaAPIError as e:
         console.print(f"[error]Failed to import model: {e}[/]")
         raise typer.Exit(1)
-
-
-@models_app.command(name="pull-hf", context_settings=COMMAND_CONTEXT)
-def pull_hf_cmd(
-    ctx: typer.Context,
-    repo: str = typer.Argument(
-        ..., help="HuggingFace repo ID (e.g., bartowski/Llama-3.2-3B-Instruct-GGUF)"
-    ),
-    file: Optional[str] = typer.Option(
-        None, "--file", "-f", help="GGUF filename to download"
-    ),
-    name: Optional[str] = typer.Option(
-        None, "--name", "-n", help="Model name in Ollama"
-    ),
-    help_: bool = command_help_option(),
-) -> None:
-    """
-    Explicit HuggingFace pull (auto-detected in 'pull' command).
-
-    Browse: https://huggingface.co/models?library=gguf
-    """
-
-    maybe_show_command_help(ctx, help_)
-    port = ensure_ollama_running()
-
-    # Delegate to the shared helper function
-    _pull_from_huggingface(repo, port, file, name)
 
 
 @models_app.command(name="remove", context_settings=COMMAND_CONTEXT)

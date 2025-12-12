@@ -62,30 +62,6 @@ airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF \
 - Ollama library: https://ollama.com/library
 - HuggingFace GGUF: https://huggingface.co/models?library=gguf
 
-### `airpods models pull-hf <repo>`
-
-Explicit HuggingFace pull (also auto-detected in `pull` command).
-
-```bash
-# Interactive mode (prompts for file selection and name)
-airpods models pull-hf bartowski/Llama-3.2-3B-Instruct-GGUF
-
-# With options
-airpods models pull-hf bartowski/Llama-3.2-3B-Instruct-GGUF \
-  --file Llama-3.2-3B-Instruct-Q4_K_M.gguf \
-  --name llama3.2-3b-q4
-```
-
-**Options:**
-- `--file, -f`: Specify GGUF filename (otherwise prompted)
-- `--name, -n`: Specify model name in Ollama (otherwise auto-generated with confirmation)
-
-**Interactive prompts:**
-1. Lists all available GGUF files in the repository with sizes
-2. Prompts for file selection if multiple files available
-3. Suggests an auto-generated model name based on repo and file
-4. Allows accepting suggested name or entering custom name
-
 ### `airpods models remove <model>`
 
 Remove an installed model from Ollama.
@@ -146,10 +122,10 @@ airpods models info llama3.2
 **Import a quantized model from HuggingFace:**
 ```bash
 # Interactive - will prompt for file selection and name
-airpods models pull-hf bartowski/Llama-3.2-3B-Instruct-GGUF
+airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF
 
 # Non-interactive
-airpods models pull-hf bartowski/Llama-3.2-3B-Instruct-GGUF \
+airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF \
   -f Llama-3.2-3B-Instruct-Q4_K_M.gguf \
   -n my-llama-3b
 ```
@@ -173,7 +149,7 @@ The following command aliases are available:
 ## Requirements
 
 - Ollama service must be running (`airpods start ollama`)
-- For pull-hf: `huggingface-hub` library (included in dependencies)
+- `huggingface-hub` library (included in dependencies, for HuggingFace model pulls)
 - Internet connection for pulling models
 
 ## Notes
