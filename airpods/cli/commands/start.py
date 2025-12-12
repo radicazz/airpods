@@ -335,6 +335,48 @@ def register(app: typer.Typer) -> CommandMap:
                 "Services may still be starting. Check with 'airpods status'[/]"
             )
 
+        # Auto-pull Ollama models if configured and service is healthy
+        ollama_specs = [s for s in specs_to_start if s.name == "ollama"]
+        if (
+            ollama_specs
+            and "ollama" in service_urls
+            and "ollama" not in failed_services
+        ):
+            from airpods import ollama as ollama_module
+            from airpods.cli.common import get_ollama_port
+            
+            spec = ollama_specs[0]
+            auto_pull = spec.raw_config.get("auto_pull_models", [])
+            
+            if auto_pull:
+                port = get_ollama_port()
+                
+                # Get list of installed models
+                try:
+                    installed = ollama_module.list_models(port)
+                    installed_names = {m.get("name") for m in installed}
+                    
+                    # Filter out models that are already installed
+                    to_pull = [m for m in auto_pull if m not in installed_names]
+                    
+                    if to_pull:
+                        console.print(f"[info]Auto-pulling {len(to_pull)} model(s)...[/]")
+                        
+                        for model_name in to_pull:
+                            try:
+                                console.print(f"  Pulling [accent]{model_name}[/]...")
+                                ollama_module.pull_model(model_name, port)
+                                console.print(f"  [ok]✓ {model_name} ready[/]")
+                            except Exception as e:
+                                console.print(
+                                    f"  [warn]Failed to pull {model_name}: {e}[/]"
+                                )
+                    elif verbose:
+                        console.print("[info]All auto-pull models already installed[/]")
+                        
+                except Exception as e:
+                    console.print(f"[warn]Auto-pull failed: {e}[/]")
+        
         # Auto-import plugins into Open WebUI if service is healthy
         if (
             webui_specs
