@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 import requests
@@ -249,3 +252,202 @@ def format_time_ago(timestamp_str: str) -> str:
             return f"{months} month{'s' if months != 1 else ''} ago"
     except Exception:
         return timestamp_str
+
+
+# HuggingFace Integration
+
+def generate_model_name_from_repo(repo_id: str, filename: Optional[str] = None) -> str:
+    """
+    Generate a model name from HuggingFace repo ID and optional filename.
+    
+    Args:
+        repo_id: HuggingFace repo ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF")
+        filename: Optional GGUF filename to extract quantization info
+        
+    Returns:
+        Suggested model name (e.g., "llama-32-3b-instruct" or "llama-32-3b-instruct-q4")
+    """
+    # Extract model name from repo (take part after /)
+    if "/" in repo_id:
+        name = repo_id.split("/", 1)[1]
+    else:
+        name = repo_id
+    
+    # Remove common suffixes
+    name = re.sub(r"-(GGUF|gguf)$", "", name, flags=re.IGNORECASE)
+    
+    # If filename provided, try to extract quantization
+    quant = ""
+    if filename:
+        # Look for quantization pattern like Q4_K_M, Q5_K_S, Q8_0, etc.
+        quant_match = re.search(r"[_-](Q\d+_[KM0]+(?:_[SMLH])?)", filename, re.IGNORECASE)
+        if quant_match:
+            quant = f"-{quant_match.group(1).lower()}"
+    
+    # Convert to lowercase and replace non-alphanumeric with hyphens
+    name = re.sub(r"[^a-zA-Z0-9]+", "-", name).lower()
+    name = re.sub(r"-+", "-", name).strip("-")
+    
+    return f"{name}{quant}"
+
+
+def list_gguf_files(repo_id: str) -> list[dict[str, Any]]:
+    """
+    List GGUF files available in a HuggingFace repository.
+    
+    Args:
+        repo_id: HuggingFace repo ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF")
+        
+    Returns:
+        List of dicts with keys: filename, size
+        
+    Raises:
+        OllamaAPIError: If HF API fails or no GGUF files found
+    """
+    try:
+        from huggingface_hub import list_repo_files, repo_info
+        
+        # List all files in the repo
+        files = list_repo_files(repo_id)
+        
+        # Filter for GGUF files
+        gguf_files = [f for f in files if f.lower().endswith(".gguf")]
+        
+        if not gguf_files:
+            raise OllamaAPIError(f"No GGUF files found in repository '{repo_id}'")
+        
+        # Get file sizes
+        info = repo_info(repo_id)
+        result = []
+        
+        for filename in gguf_files:
+            # Find size from sibling files
+            size = 0
+            for sibling in info.siblings:
+                if sibling.rfilename == filename:
+                    size = sibling.size or 0
+                    break
+            
+            result.append({
+                "filename": filename,
+                "size": size,
+            })
+        
+        # Sort by size (descending) for better UX
+        result.sort(key=lambda x: x["size"], reverse=True)
+        
+        return result
+        
+    except ImportError as e:
+        raise OllamaAPIError(
+            "huggingface-hub not installed. Install with: uv pip install huggingface-hub"
+        ) from e
+    except Exception as e:
+        raise OllamaAPIError(f"Failed to list GGUF files from '{repo_id}': {e}") from e
+
+
+def pull_from_huggingface(
+    repo_id: str,
+    filename: str,
+    model_name: str,
+    port: int = 11434,
+    progress_callback: Optional[Callable[[str, int, int], None]] = None,
+) -> bool:
+    """
+    Download a GGUF file from HuggingFace and import it into Ollama.
+    
+    Args:
+        repo_id: HuggingFace repo ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF")
+        filename: GGUF filename to download
+        model_name: Name to give the model in Ollama
+        port: Ollama API port (default: 11434)
+        progress_callback: Optional callback called with (phase, current, total)
+                          phase is "download" or "import"
+        
+    Returns:
+        True if import succeeded
+        
+    Raises:
+        OllamaAPIError: If download or import fails
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+        import subprocess
+        
+        # Download from HuggingFace
+        if progress_callback:
+            progress_callback("download", 0, 100)
+        
+        try:
+            local_path = hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                local_dir_use_symlinks=False,
+            )
+        except Exception as e:
+            raise OllamaAPIError(f"Failed to download from HuggingFace: {e}") from e
+        
+        if progress_callback:
+            progress_callback("download", 100, 100)
+        
+        # Create modelfile
+        if progress_callback:
+            progress_callback("import", 0, 100)
+        
+        modelfile_content = f"FROM {local_path}\n"
+        
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".modelfile", delete=False) as f:
+            f.write(modelfile_content)
+            modelfile_path = f.name
+        
+        try:
+            # Import into Ollama via CLI (requires podman exec)
+            # We'll use the Ollama container name from the service spec
+            from airpods import podman
+            
+            # Copy modelfile into container
+            container = "ollama-0"  # Default from config
+            
+            # First, check if we can reach the Ollama API
+            if not ensure_ollama_available(port):
+                raise OllamaAPIError(
+                    "Ollama service not available. Start with 'airpods start ollama'"
+                )
+            
+            # Use podman exec to run ollama create command
+            result = subprocess.run(
+                [
+                    "podman",
+                    "exec",
+                    "-i",
+                    container,
+                    "sh",
+                    "-c",
+                    f"cat > /tmp/Modelfile && ollama create {model_name} -f /tmp/Modelfile",
+                ],
+                input=modelfile_content.encode(),
+                capture_output=True,
+                check=False,
+            )
+            
+            if result.returncode != 0:
+                error_msg = result.stderr.decode() if result.stderr else "Unknown error"
+                raise OllamaAPIError(f"Failed to import model: {error_msg}")
+            
+            if progress_callback:
+                progress_callback("import", 100, 100)
+            
+            return True
+            
+        finally:
+            # Clean up modelfile
+            Path(modelfile_path).unlink(missing_ok=True)
+        
+    except ImportError as e:
+        raise OllamaAPIError(
+            "huggingface-hub not installed. Install with: uv pip install huggingface-hub"
+        ) from e
+    except OllamaAPIError:
+        raise
+    except Exception as e:
+        raise OllamaAPIError(f"Failed to import model from HuggingFace: {e}") from e
