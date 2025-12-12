@@ -76,6 +76,7 @@ def test_import_functions_uses_container(
 
     assert imported == 1
     assert captured["cmd"][2] == "custom-container"
+    assert "user_id = excluded.user_id" in captured["cmd"][-1]
     assert len(calls) == 1
 
 

@@ -179,15 +179,11 @@ def pull_model_cmd(
 
     if source == "huggingface":
         # Route to HuggingFace pull logic
-        console.print(
-            f"[dim]Detected HuggingFace repo: [accent]{model}[/][/dim]"
-        )
+        console.print(f"[dim]Detected HuggingFace repo: [accent]{model}[/][/dim]")
         _pull_from_huggingface(model, port, file, name)
     else:
         # Route to Ollama pull logic
-        console.print(
-            f"[dim]Pulling from Ollama library: [accent]{model}[/][/dim]"
-        )
+        console.print(f"[dim]Pulling from Ollama library: [accent]{model}[/][/dim]")
         _pull_from_ollama(model, port)
 
 
@@ -376,13 +372,13 @@ def pull_hf_cmd(
 ) -> None:
     """
     Explicit HuggingFace pull (auto-detected in 'pull' command).
-    
+
     Browse: https://huggingface.co/models?library=gguf
     """
 
     maybe_show_command_help(ctx, help_)
     port = ensure_ollama_running()
-    
+
     # Delegate to the shared helper function
     _pull_from_huggingface(repo, port, file, name)
 

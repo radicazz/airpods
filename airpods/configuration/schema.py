@@ -54,7 +54,7 @@ class CLIConfig(BaseModel):
     startup_timeout: int = Field(default=120, ge=10, le=600)
     startup_check_interval: float = Field(default=2.0, ge=0.5, le=10.0)
     max_concurrent_pulls: int = Field(default=3, ge=1, le=10)
-    plugin_owner: Literal["auto", "admin", "airpods"] = "auto"
+    plugin_owner: Literal["auto", "admin", "airpods"] = "airpods"
     auto_confirm: bool = False
     verbose: bool = False
     debug: bool = False

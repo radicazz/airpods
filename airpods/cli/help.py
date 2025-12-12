@@ -96,22 +96,22 @@ def show_root_help(ctx: typer.Context) -> None:
     renderables: list = [Text(__description__, style=PALETTE["fg"])]
     usage_text = Text("  airpods [OPTIONS] COMMAND [ARGS]...", style=PALETTE["fg"])
     _append_section(renderables, "Usage", usage_text)
-    
+
     # Split commands into available and disabled
     available_rows, disabled_rows = _split_commands_by_availability(ctx)
-    
+
     # Show available commands
     if available_rows:
-        _append_section(renderables, "Commands", _build_command_table_from_rows(available_rows))
-    
+        _append_section(
+            renderables, "Commands", _build_command_table_from_rows(available_rows)
+        )
+
     # Show disabled commands if any
     if disabled_rows:
         _append_section(
-            renderables,
-            "Disabled",
-            _build_disabled_command_table(disabled_rows)
+            renderables, "Disabled", _build_disabled_command_table(disabled_rows)
         )
-    
+
     _append_section(renderables, "Options", build_option_table(ctx))
     _render_help_panel(renderables)
 
@@ -342,34 +342,36 @@ def _split_commands_by_availability(ctx: typer.Context):
     command_group = ctx.command
     if command_group is None or not isinstance(command_group, click.MultiCommand):
         return [], []
-    
+
     available_rows = []
     disabled_rows = []
-    
+
     for name in command_group.list_commands(ctx):
         command = command_group.get_command(ctx, name)
         if not command or command.hidden:
             continue
-        
+
         alias_text = ", ".join(COMMAND_ALIAS_GROUPS.get(name, []))
         description = _command_description(command)
         option_hint = command_param_hint(command)
-        
+
         # Check if command has a service dependency
         if name in COMMAND_DEPENDENCIES:
             service_name = COMMAND_DEPENDENCIES[name]
             is_available, reason = check_service_availability(service_name)
-            
+
             if is_available:
                 available_rows.append((name, alias_text, option_hint, description))
             else:
                 # Add reason to description for disabled commands
-                disabled_desc = f"{description} ({reason})" if description else f"({reason})"
+                disabled_desc = (
+                    f"{description} ({reason})" if description else f"({reason})"
+                )
                 disabled_rows.append((name, alias_text, option_hint, disabled_desc))
         else:
             # No dependency, always available
             available_rows.append((name, alias_text, option_hint, description))
-    
+
     return available_rows, disabled_rows
 
 
@@ -381,7 +383,7 @@ def _build_command_table_from_rows(rows: list[tuple[str, str, str, str]]) -> Tab
         {"style": f"bold {PALETTE['bright_cyan']}", "no_wrap": True},  # Arguments
         {"style": PALETTE["fg"]},  # Descriptions
     )
-    
+
     table = ui.themed_grid(padding=(0, 3))
     for column in column_styles:
         table.add_column(**column)
@@ -398,7 +400,7 @@ def _build_disabled_command_table(rows: list[tuple[str, str, str, str]]) -> Tabl
         {"style": f"bold {PALETTE['bright_cyan']}", "no_wrap": True},  # Arguments
         {"style": PALETTE["fg_muted"]},  # Descriptions (muted)
     )
-    
+
     table = ui.themed_grid(padding=(0, 3))
     for column in column_styles:
         table.add_column(**column)

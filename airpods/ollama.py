@@ -250,9 +250,7 @@ def format_time_ago(timestamp_str: str) -> str:
 # HuggingFace Integration
 
 
-def search_huggingface_models(
-    query: str, limit: int = 5
-) -> list[dict[str, Any]]:
+def search_huggingface_models(query: str, limit: int = 5) -> list[dict[str, Any]]:
     """
     Search HuggingFace for GGUF models matching the query.
 
@@ -270,7 +268,7 @@ def search_huggingface_models(
         from huggingface_hub import HfApi
 
         api = HfApi()
-        
+
         # Search for models with GGUF in the name/tags
         models = api.list_models(
             search=f"{query} GGUF",
@@ -278,23 +276,29 @@ def search_huggingface_models(
             direction=-1,
             limit=limit * 3,  # Get more to filter
         )
-        
+
         results = []
         for model in models:
             # Filter for models that likely contain GGUF files
-            if "gguf" in model.id.lower() or (model.tags and "gguf" in " ".join(model.tags).lower()):
+            if "gguf" in model.id.lower() or (
+                model.tags and "gguf" in " ".join(model.tags).lower()
+            ):
                 repo_parts = model.id.split("/")
-                results.append({
-                    "repo_id": model.id,
-                    "author": repo_parts[0] if len(repo_parts) > 1 else "unknown",
-                    "model_name": repo_parts[1] if len(repo_parts) > 1 else repo_parts[0],
-                    "downloads": getattr(model, "downloads", 0),
-                    "likes": getattr(model, "likes", 0),
-                })
-                
+                results.append(
+                    {
+                        "repo_id": model.id,
+                        "author": repo_parts[0] if len(repo_parts) > 1 else "unknown",
+                        "model_name": repo_parts[1]
+                        if len(repo_parts) > 1
+                        else repo_parts[0],
+                        "downloads": getattr(model, "downloads", 0),
+                        "likes": getattr(model, "likes", 0),
+                    }
+                )
+
                 if len(results) >= limit:
                     break
-        
+
         return results
 
     except ImportError as e:
@@ -308,7 +312,7 @@ def search_huggingface_models(
 def search_ollama_library(query: str, limit: int = 5) -> list[dict[str, Any]]:
     """
     Search Ollama's public library for models.
-    
+
     Note: This uses a best-effort approach since Ollama doesn't have a public search API.
     We'll return popular models that match the query.
 
@@ -320,51 +324,126 @@ def search_ollama_library(query: str, limit: int = 5) -> list[dict[str, Any]]:
         List of dicts with keys: name, description, tags
     """
     query_lower = query.lower()
-    
+
     # Curated list of popular Ollama models with metadata
     # This could be enhanced by scraping ollama.ai/library or using their API if available
     popular_models = [
-        {"name": "llama3.2", "description": "Meta's Llama 3.2 model", "tags": ["llama", "meta", "instruct", "3b", "1b"], "size": "small"},
-        {"name": "llama3.2:3b", "description": "Meta's Llama 3.2 3B model", "tags": ["llama", "meta", "instruct"], "size": "small"},
-        {"name": "llama3.1", "description": "Meta's Llama 3.1 model", "tags": ["llama", "meta", "instruct", "8b", "70b", "405b"], "size": "medium"},
-        {"name": "llama3.1:8b", "description": "Meta's Llama 3.1 8B model", "tags": ["llama", "meta", "instruct"], "size": "medium"},
-        {"name": "qwen2.5", "description": "Alibaba's Qwen 2.5 model", "tags": ["qwen", "alibaba", "instruct"], "size": "medium"},
-        {"name": "qwen2.5:7b", "description": "Alibaba's Qwen 2.5 7B model", "tags": ["qwen", "alibaba", "instruct"], "size": "medium"},
-        {"name": "mistral", "description": "Mistral AI's 7B model", "tags": ["mistral", "instruct"], "size": "medium"},
-        {"name": "mixtral", "description": "Mistral AI's MoE model", "tags": ["mistral", "moe", "instruct"], "size": "large"},
-        {"name": "phi3", "description": "Microsoft's Phi-3 model", "tags": ["phi", "microsoft", "small"], "size": "small"},
-        {"name": "gemma2", "description": "Google's Gemma 2 model", "tags": ["gemma", "google"], "size": "medium"},
-        {"name": "deepseek-coder", "description": "DeepSeek's coding model", "tags": ["deepseek", "code", "programming"], "size": "medium"},
-        {"name": "codellama", "description": "Meta's Code Llama model", "tags": ["llama", "code", "programming"], "size": "medium"},
-        {"name": "starcoder2", "description": "StarCoder 2 coding model", "tags": ["starcoder", "code", "programming"], "size": "medium"},
-        {"name": "llava", "description": "Vision-language model", "tags": ["vision", "multimodal", "image"], "size": "medium"},
-        {"name": "nous-hermes", "description": "Nous Research Hermes model", "tags": ["nous", "hermes", "instruct"], "size": "medium"},
+        {
+            "name": "llama3.2",
+            "description": "Meta's Llama 3.2 model",
+            "tags": ["llama", "meta", "instruct", "3b", "1b"],
+            "size": "small",
+        },
+        {
+            "name": "llama3.2:3b",
+            "description": "Meta's Llama 3.2 3B model",
+            "tags": ["llama", "meta", "instruct"],
+            "size": "small",
+        },
+        {
+            "name": "llama3.1",
+            "description": "Meta's Llama 3.1 model",
+            "tags": ["llama", "meta", "instruct", "8b", "70b", "405b"],
+            "size": "medium",
+        },
+        {
+            "name": "llama3.1:8b",
+            "description": "Meta's Llama 3.1 8B model",
+            "tags": ["llama", "meta", "instruct"],
+            "size": "medium",
+        },
+        {
+            "name": "qwen2.5",
+            "description": "Alibaba's Qwen 2.5 model",
+            "tags": ["qwen", "alibaba", "instruct"],
+            "size": "medium",
+        },
+        {
+            "name": "qwen2.5:7b",
+            "description": "Alibaba's Qwen 2.5 7B model",
+            "tags": ["qwen", "alibaba", "instruct"],
+            "size": "medium",
+        },
+        {
+            "name": "mistral",
+            "description": "Mistral AI's 7B model",
+            "tags": ["mistral", "instruct"],
+            "size": "medium",
+        },
+        {
+            "name": "mixtral",
+            "description": "Mistral AI's MoE model",
+            "tags": ["mistral", "moe", "instruct"],
+            "size": "large",
+        },
+        {
+            "name": "phi3",
+            "description": "Microsoft's Phi-3 model",
+            "tags": ["phi", "microsoft", "small"],
+            "size": "small",
+        },
+        {
+            "name": "gemma2",
+            "description": "Google's Gemma 2 model",
+            "tags": ["gemma", "google"],
+            "size": "medium",
+        },
+        {
+            "name": "deepseek-coder",
+            "description": "DeepSeek's coding model",
+            "tags": ["deepseek", "code", "programming"],
+            "size": "medium",
+        },
+        {
+            "name": "codellama",
+            "description": "Meta's Code Llama model",
+            "tags": ["llama", "code", "programming"],
+            "size": "medium",
+        },
+        {
+            "name": "starcoder2",
+            "description": "StarCoder 2 coding model",
+            "tags": ["starcoder", "code", "programming"],
+            "size": "medium",
+        },
+        {
+            "name": "llava",
+            "description": "Vision-language model",
+            "tags": ["vision", "multimodal", "image"],
+            "size": "medium",
+        },
+        {
+            "name": "nous-hermes",
+            "description": "Nous Research Hermes model",
+            "tags": ["nous", "hermes", "instruct"],
+            "size": "medium",
+        },
     ]
-    
+
     # Score each model based on query match
     scored_models = []
     for model in popular_models:
         score = 0
-        
+
         # Exact name match gets highest score
         if query_lower == model["name"].lower():
             score += 100
         # Partial name match
         elif query_lower in model["name"].lower():
             score += 50
-        
+
         # Tag matches
         for tag in model["tags"]:
             if query_lower in tag.lower():
                 score += 10
-        
+
         # Description match
         if query_lower in model["description"].lower():
             score += 5
-        
+
         if score > 0:
             scored_models.append((score, model))
-    
+
     # Sort by score (descending) and return top results
     scored_models.sort(key=lambda x: x[0], reverse=True)
     return [model for score, model in scored_models[:limit]]

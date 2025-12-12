@@ -242,17 +242,23 @@ try:
         now = int(time.time())
         data = {{"id": OWNER_ID}}
         if "name" in cols:
-            data["name"] = "AirPods System"
+            data["name"] = "airpods"
         if "email" in cols:
-            data["email"] = "airpods-system@local"
+            data["email"] = "airpods@local"
         if "username" in cols:
             data["username"] = "airpods"
         if "role" in cols:
             data["role"] = "admin"
+        if "profile_image_url" in cols:
+            data["profile_image_url"] = ""
         if "is_admin" in cols:
             data["is_admin"] = 1
         if "is_active" in cols:
             data["is_active"] = 1
+        if "active" in cols:
+            data["active"] = 1
+        if "timestamp" in cols:
+            data["timestamp"] = now
         for key in ("created_at", "updated_at", "last_active_at"):
             if key in cols:
                 data[key] = now
@@ -380,6 +386,7 @@ def import_plugins_to_webui(
                 0
             )
             ON CONFLICT(id) DO UPDATE SET
+                user_id = excluded.user_id,
                 content = excluded.content,
                 updated_at = excluded.updated_at;
             """

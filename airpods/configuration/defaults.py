@@ -27,7 +27,7 @@ DEFAULT_CONFIG_DICT = {
         "startup_timeout": 120,
         "startup_check_interval": 2.0,
         "max_concurrent_pulls": 3,
-        "plugin_owner": "auto",
+        "plugin_owner": "airpods",
         "auto_confirm": False,
         "debug": False,
     },
