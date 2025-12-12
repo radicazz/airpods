@@ -226,3 +226,37 @@ def get_ollama_port() -> int:
 
     # Fallback to default
     return 11434
+
+
+def check_service_availability(service_name: str) -> tuple[bool, str]:
+    """
+    Check if a service is enabled in config and currently running.
+
+    Args:
+        service_name: Name of the service to check (e.g., "ollama")
+
+    Returns:
+        Tuple of (is_available, reason_if_not)
+        - (True, "") if service is available
+        - (False, "reason") if service is not available
+    """
+    # Check if service is in the registry (enabled in config)
+    spec = config_module.REGISTRY.get(service_name)
+    if not spec:
+        return False, f"{service_name} service not enabled"
+
+    # Check if the pod is actually running
+    try:
+        pod_rows = manager.pod_status_rows() or {}
+        row = pod_rows.get(spec.pod)
+        if not row:
+            return False, f"{service_name} service not running"
+
+        status = row.get("Status", "")
+        if status != "Running":
+            return False, f"{service_name} service not running"
+
+        return True, ""
+    except Exception:
+        # If we can't check status, assume not available
+        return False, f"{service_name} service status unknown"

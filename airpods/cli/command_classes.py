@@ -48,6 +48,21 @@ def _airpods_main(
     try:
         try:
             with self.make_context(prog_name, args, **extra) as ctx:
+                # Check if the command being invoked requires a service that's not available
+                from airpods.cli.help import COMMAND_DEPENDENCIES
+                from airpods.cli.common import check_service_availability
+                
+                command_name = ctx.invoked_subcommand or (ctx.info_name if ctx.info_name != "-root-command" else None)
+                if command_name and command_name in COMMAND_DEPENDENCIES:
+                    service_name = COMMAND_DEPENDENCIES[command_name]
+                    is_available, reason = check_service_availability(service_name)
+                    
+                    if not is_available:
+                        from airpods.logging import console
+                        console.print(f"[error]Error:[/] Command '{command_name}' is currently disabled.")
+                        console.print(f"[info]{reason.capitalize()}. Start it with 'airpods start {service_name}'[/]")
+                        sys.exit(1)
+                
                 rv = self.invoke(ctx)
                 if not standalone_mode:
                     return rv
