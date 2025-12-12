@@ -156,17 +156,7 @@ def pull_model_cmd(
     ),
     help_: bool = command_help_option(),
 ) -> None:
-    """
-    Pull a model from Ollama library or HuggingFace (auto-detected).
-
-    Ollama library: https://ollama.com/library
-    HuggingFace GGUF: https://huggingface.co/models?library=gguf
-
-    Examples:
-      airpods models pull llama3.2          # Ollama library
-      airpods models pull qwen2.5:7b        # Ollama library with tag
-      airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF  # HuggingFace
-    """
+    """Pull a model from Ollama library or HuggingFace (auto-detected)."""
 
     maybe_show_command_help(ctx, help_)
     port = ensure_ollama_running()
