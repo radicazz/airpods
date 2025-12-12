@@ -29,25 +29,42 @@ Total storage: 7.0 GB (2 models)
 
 ### `airpods models pull <model>`
 
-Pull a model from the Ollama official library.
+Pull a model from Ollama library or HuggingFace (auto-detected).
+
+The pull command intelligently detects the source:
+- **Ollama tags** (no `/`): `llama3.2`, `qwen2.5:7b` → pulls from Ollama library
+- **HuggingFace repos** (contains `/`): `bartowski/Llama-3.2-3B-Instruct-GGUF` → pulls from HuggingFace
 
 ```bash
-# Pull latest version
+# Ollama library - simple tags
 airpods models pull llama3.2
-
-# Pull specific tag
 airpods models pull qwen2.5:7b
 airpods models pull mistral:latest
+
+# HuggingFace repos - auto-detected
+airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF
+airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF \
+  --file Llama-3.2-3B-Instruct-Q4_K_M.gguf \
+  --name llama3.2-3b-q4
 ```
 
+**Options (for HuggingFace repos):**
+- `--file, -f`: Specify GGUF filename (otherwise prompted)
+- `--name, -n`: Specify model name in Ollama (otherwise auto-generated)
+
 **Features:**
+- Automatic source detection (Ollama vs HuggingFace)
 - Real-time progress bar with download speed
 - Automatic model size detection
-- Supports all Ollama library models with tag syntax
+- Interactive file selection for HuggingFace repos with multiple GGUF files
+
+**Browse models:**
+- Ollama library: https://ollama.com/library
+- HuggingFace GGUF: https://huggingface.co/models?library=gguf
 
 ### `airpods models pull-hf <repo>`
 
-Pull a GGUF model from HuggingFace and import it into Ollama.
+Explicit HuggingFace pull (also auto-detected in `pull` command).
 
 ```bash
 # Interactive mode (prompts for file selection and name)
