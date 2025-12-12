@@ -70,6 +70,11 @@ def list_models_cmd(
                 "Pull a model with 'airpods models pull <model>' or "
                 "'airpods models pull-hf <repo>'"
             )
+            console.print(
+                "\n[dim]Browse models:[/dim]\n"
+                "  [dim]• Ollama library: [link=https://ollama.com/library]https://ollama.com/library[/link][/dim]\n"
+                "  [dim]• HuggingFace GGUF: [link=https://huggingface.co/models?library=gguf]https://huggingface.co/models?library=gguf[/link][/dim]"
+            )
             return
 
         # Create Rich table
@@ -118,7 +123,7 @@ def pull_model_cmd(
     model: str = typer.Argument(..., help="Model name (e.g., llama3.2, qwen2.5:7b)"),
     help_: bool = command_help_option(),
 ) -> None:
-    """Pull a model from the Ollama library."""
+    """Pull a model from the Ollama library (browse: https://ollama.com/library)."""
 
     maybe_show_command_help(ctx, help_)
     port = ensure_ollama_running()
@@ -203,7 +208,7 @@ def pull_hf_cmd(
     ),
     help_: bool = command_help_option(),
 ) -> None:
-    """Pull a GGUF model from HuggingFace and import to Ollama."""
+    """Pull a GGUF model from HuggingFace and import to Ollama (browse: https://huggingface.co/models?library=gguf)."""
 
     maybe_show_command_help(ctx, help_)
     port = ensure_ollama_running()
