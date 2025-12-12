@@ -8,6 +8,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    Iterator,
     List,
     Literal,
     Optional,
@@ -89,6 +90,9 @@ class ServiceRegistry:
     def __init__(self, specs: Sequence[ServiceSpec]):
         self._order = list(specs)
         self._specs = {spec.name: spec for spec in specs}
+
+    def __iter__(self) -> Iterator[ServiceSpec]:
+        return iter(self._order)
 
     def all(self) -> List[ServiceSpec]:
         return list(self._order)

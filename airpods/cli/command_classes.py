@@ -26,11 +26,11 @@ def _airpods_main(
     rich_markup_mode: MarkupMode = DEFAULT_MARKUP_MODE,
     **extra: Any,
 ) -> Any:
-    """Typer-style main() with extra help on usage errors.
+    """Typer-style main() with help suggestion on usage errors.
 
     This is based on typer.core._main, but when a click.UsageError is raised
-    (typically missing required args/options), we render the Rich help view
-    for the failing context after the error, then exit with the usual code.
+    (typically missing required args/options), we suggest running --help
+    instead of dumping the full help text.
     """
 
     if args is None:
@@ -48,6 +48,22 @@ def _airpods_main(
     try:
         try:
             with self.make_context(prog_name, args, **extra) as ctx:
+                # Check if the command being invoked requires a service that's not available
+                from airpods.cli.help import COMMAND_DEPENDENCIES
+                from airpods.cli.common import check_service_availability
+                
+                # Reconstruct the full command path (e.g., "models list")
+                full_command_path = ctx.command_path
+                if full_command_path in COMMAND_DEPENDENCIES:
+                    service_name = COMMAND_DEPENDENCIES[full_command_path]
+                    is_available, reason = check_service_availability(service_name)
+                    
+                    if not is_available:
+                        from airpods.logging import console
+                        console.print(f"[error]Error:[/] Command '{full_command_path}' is currently disabled.")
+                        console.print(f"[info]{reason.capitalize()}. Start it with 'airpods start {service_name}'[/]")
+                        sys.exit(1)
+                
                 rv = self.invoke(ctx)
                 if not standalone_mode:
                     return rv
@@ -59,15 +75,28 @@ def _airpods_main(
             if not standalone_mode:
                 raise
 
-            if rich and rich_markup_mode is not None:
-                rich_utils.rich_format_error(exc)
-            else:
-                exc.show()
-
+            # Custom error formatting that matches the airpods theme
+            from airpods.logging import console
+            
             if isinstance(exc, click.UsageError):
+                # Show usage line and error message without the box
                 help_ctx = exc.ctx or click.get_current_context(silent=True)
                 if help_ctx is not None:
-                    show_help_for_context(help_ctx)
+                    usage = help_ctx.command.get_usage(help_ctx)
+                    console.print(f"[muted]{usage}[/]")
+                
+                console.print(f"[error]Error:[/] {exc.format_message()}")
+                
+                if help_ctx is not None:
+                    # Suggest --help instead of printing the full help
+                    command_name = help_ctx.command_path or "airpods"
+                    console.print(f"[info]Try '{command_name} --help' for more information.[/]")
+            else:
+                # For other Click exceptions, use default formatting
+                if rich and rich_markup_mode is not None:
+                    rich_utils.rich_format_error(exc)
+                else:
+                    exc.show()
 
             sys.exit(exc.exit_code)
         except OSError as exc:

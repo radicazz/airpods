@@ -70,7 +70,37 @@ def _as_completion_items(matches: List[str]) -> CompletionList:
     return [CompletionItem(match) for match in matches]
 
 
+def model_name_completion(
+    ctx: typer.Context | None,  # noqa: ARG001
+    param: click.Parameter | None,  # noqa: ARG001
+    incomplete: str,
+) -> CompletionList:
+    """Return installed Ollama model names for completion."""
+
+    try:
+        from airpods import ollama
+        from airpods.cli.common import get_ollama_port
+
+        port = get_ollama_port()
+
+        # Only attempt if Ollama is available
+        if not ollama.ensure_ollama_available(port, timeout=0.5):
+            return []
+
+        # Get installed models
+        models = ollama.list_models(port)
+        model_names = [m.get("name", "") for m in models if m.get("name")]
+
+        matches = _match_candidates(model_names, incomplete)
+        return _as_completion_items(matches)
+
+    except Exception:
+        # Fall back gracefully if Ollama isn't available or any error occurs
+        return []
+
+
 __all__ = [
     "service_name_completion",
     "config_key_completion",
+    "model_name_completion",
 ]

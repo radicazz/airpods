@@ -60,5 +60,6 @@ def test_config_get_missing_key_shows_help(runner):
     combined = result.stdout or ""
     assert result.exit_code != 0
     assert "Missing argument" in combined
-    assert "Print a specific configuration value" in combined
-    assert "Arguments" in combined
+    # Should suggest --help, not print full help
+    assert "Try 'airpods config get --help' for more information" in combined
+    assert "Print a specific configuration value" not in combined

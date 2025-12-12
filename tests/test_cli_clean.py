@@ -66,11 +66,12 @@ def mock_dirs(tmp_path):
 
 
 def test_clean_no_options_shows_help(mock_podman):
-    """Test that clean with no options shows a warning without tip/help."""
+    """Test that clean with no options shows error and suggests --help."""
     result = runner.invoke(app, ["clean"])
     assert result.exit_code == 1
     assert "No cleanup targets specified" in result.stdout
-    assert "Use --all to remove everything" not in result.stdout
+    assert "Try 'airpods clean --help' for more information" in result.stdout
+    # Should NOT show full help text
     assert "Remove volumes, images, configs, and user data" not in result.stdout
 
 

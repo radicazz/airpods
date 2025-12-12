@@ -92,7 +92,9 @@ def test_restore_without_archive_shows_help(runner, mock_podman):
     combined = result.stdout or ""
     assert result.exit_code != 0
     assert "Missing argument" in combined or "ARCHIVE" in combined
-    assert "Restore configs, DB, and metadata" in combined
+    # Should suggest --help, not print full help
+    assert "Try 'airpods restore --help' for more information" in combined
+    assert "Restore configs, DB, and metadata" not in combined
 
 
 def test_restore_missing_archive_errors(runner, mock_podman):

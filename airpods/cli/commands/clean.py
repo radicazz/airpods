@@ -286,7 +286,6 @@ def register(app: typer.Typer) -> CommandMap:
             exit_with_help(
                 ctx,
                 message="No cleanup targets specified.",
-                show_help=False,
                 code=1,
             )
 

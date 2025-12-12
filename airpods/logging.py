@@ -11,20 +11,27 @@ from rich.progress import (
 from rich.theme import Theme
 
 
-# One Dark-inspired palette tuned for Rich output
+# One Dark-inspired palette tuned for Rich output with enhanced contrast
 PALETTE = {
-    "fg": "#abb2bf",
-    "fg_muted": "#5c6370",
+    "fg": "#d7dae0",  # Brighter default text
+    "fg_muted": "#7f848e",  # Slightly brighter muted text
     "bg": "#1e222a",
     "bg_alt": "#21252b",
     "bg_offset": "#2c323c",
     "green": "#98c379",
+    "bright_green": "#a9d98c",  # More vibrant green for commands
     "yellow": "#e5c07b",
+    "bright_yellow": "#f0d399",  # Brighter yellow
     "orange": "#d19a66",
+    "bright_orange": "#e0ac7a",  # Brighter orange
     "blue": "#61afef",
+    "bright_blue": "#73bcf7",  # Brighter blue
     "cyan": "#56b6c2",
+    "bright_cyan": "#6ecbd5",  # Brighter cyan for arguments
     "purple": "#c678dd",
+    "bright_purple": "#d89ae8",  # Brighter purple for aliases
     "red": "#e06c75",
+    "bright_red": "#ec7985",  # Brighter red
 }
 
 _theme = Theme(
@@ -37,7 +44,7 @@ _theme = Theme(
         "error": f"bold {PALETTE['red']}",
         "info": PALETTE["blue"],
         "alias": PALETTE["purple"],
-        "section": f"bold {PALETTE['orange']}",
+        "section": f"bold {PALETTE['bright_orange']}",  # Brighter section titles
     }
 )
 
