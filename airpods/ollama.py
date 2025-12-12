@@ -26,11 +26,11 @@ def get_ollama_url(port: int = 11434) -> str:
 def ensure_ollama_available(port: int = 11434, timeout: float = 2.0) -> bool:
     """
     Check if Ollama service is available and healthy.
-    
+
     Args:
         port: Ollama API port (default: 11434)
         timeout: Connection timeout in seconds
-        
+
     Returns:
         True if Ollama is available, False otherwise
     """
@@ -47,13 +47,13 @@ def ensure_ollama_available(port: int = 11434, timeout: float = 2.0) -> bool:
 def list_models(port: int = 11434) -> list[dict[str, Any]]:
     """
     List all installed Ollama models.
-    
+
     Args:
         port: Ollama API port (default: 11434)
-        
+
     Returns:
         List of model dictionaries with keys: name, modified_at, size, digest, details
-        
+
     Raises:
         OllamaAPIError: If API request fails
     """
@@ -72,14 +72,14 @@ def list_models(port: int = 11434) -> list[dict[str, Any]]:
 def show_model(name: str, port: int = 11434) -> dict[str, Any]:
     """
     Get detailed information about a specific model.
-    
+
     Args:
         name: Model name (with optional tag, e.g., "llama3.2" or "llama3.2:7b")
         port: Ollama API port (default: 11434)
-        
+
     Returns:
         Dictionary with model details including modelfile, parameters, template, etc.
-        
+
     Raises:
         OllamaAPIError: If API request fails or model not found
     """
@@ -102,16 +102,16 @@ def pull_model(
 ) -> bool:
     """
     Pull a model from the Ollama library.
-    
+
     Args:
         name: Model name (with optional tag, e.g., "llama3.2" or "llama3.2:7b")
         port: Ollama API port (default: 11434)
         progress_callback: Optional callback function called with progress updates
                           Receives dict with keys: status, digest, total, completed
-        
+
     Returns:
         True if pull succeeded
-        
+
     Raises:
         OllamaAPIError: If API request fails
     """
@@ -123,7 +123,7 @@ def pull_model(
             timeout=None,  # No timeout for long downloads
         )
         response.raise_for_status()
-        
+
         # Stream progress updates
         for line in response.iter_lines():
             if line:
@@ -131,13 +131,13 @@ def pull_model(
                     data = json.loads(line)
                     if progress_callback:
                         progress_callback(data)
-                    
+
                     # Check for errors in the response
                     if "error" in data:
                         raise OllamaAPIError(f"Pull failed: {data['error']}")
                 except json.JSONDecodeError:
                     continue
-        
+
         return True
     except requests.RequestException as e:
         raise OllamaAPIError(f"Failed to pull model '{name}': {e}") from e
@@ -146,14 +146,14 @@ def pull_model(
 def delete_model(name: str, port: int = 11434) -> bool:
     """
     Delete an installed model.
-    
+
     Args:
         name: Model name (with optional tag, e.g., "llama3.2" or "llama3.2:7b")
         port: Ollama API port (default: 11434)
-        
+
     Returns:
         True if deletion succeeded
-        
+
     Raises:
         OllamaAPIError: If API request fails
     """
@@ -172,10 +172,10 @@ def delete_model(name: str, port: int = 11434) -> bool:
 def get_storage_usage(models: list[dict[str, Any]]) -> int:
     """
     Calculate total storage used by models.
-    
+
     Args:
         models: List of model dictionaries from list_models()
-        
+
     Returns:
         Total size in bytes
     """
@@ -185,24 +185,24 @@ def get_storage_usage(models: list[dict[str, Any]]) -> int:
 def format_size(size_bytes: int) -> str:
     """
     Format bytes into human-readable size.
-    
+
     Args:
         size_bytes: Size in bytes
-        
+
     Returns:
         Formatted string (e.g., "2.3 GB", "150 MB")
     """
     if size_bytes == 0:
         return "0 B"
-    
+
     units = ["B", "KB", "MB", "GB", "TB"]
     unit_index = 0
     size = float(size_bytes)
-    
+
     while size >= 1024.0 and unit_index < len(units) - 1:
         size /= 1024.0
         unit_index += 1
-    
+
     if unit_index == 0:
         return f"{int(size)} {units[unit_index]}"
     else:
@@ -212,27 +212,27 @@ def format_size(size_bytes: int) -> str:
 def format_time_ago(timestamp_str: str) -> str:
     """
     Format ISO timestamp into human-readable relative time.
-    
+
     Args:
         timestamp_str: ISO 8601 timestamp string
-        
+
     Returns:
         Formatted string (e.g., "2 days ago", "3 hours ago")
     """
     try:
         from datetime import datetime, timezone
-        
+
         # Parse the timestamp (handle both with and without microseconds)
         if "." in timestamp_str:
             timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
         else:
             timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-        
+
         now = datetime.now(timezone.utc)
         delta = now - timestamp
-        
+
         seconds = delta.total_seconds()
-        
+
         if seconds < 60:
             return "just now"
         elif seconds < 3600:
@@ -256,14 +256,15 @@ def format_time_ago(timestamp_str: str) -> str:
 
 # HuggingFace Integration
 
+
 def generate_model_name_from_repo(repo_id: str, filename: Optional[str] = None) -> str:
     """
     Generate a model name from HuggingFace repo ID and optional filename.
-    
+
     Args:
         repo_id: HuggingFace repo ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF")
         filename: Optional GGUF filename to extract quantization info
-        
+
     Returns:
         Suggested model name (e.g., "llama-32-3b-instruct" or "llama-32-3b-instruct-q4")
     """
@@ -272,54 +273,56 @@ def generate_model_name_from_repo(repo_id: str, filename: Optional[str] = None) 
         name = repo_id.split("/", 1)[1]
     else:
         name = repo_id
-    
+
     # Remove common suffixes
     name = re.sub(r"-(GGUF|gguf)$", "", name, flags=re.IGNORECASE)
-    
+
     # If filename provided, try to extract quantization
     quant = ""
     if filename:
         # Look for quantization pattern like Q4_K_M, Q5_K_S, Q8_0, etc.
-        quant_match = re.search(r"[_-](Q\d+_[KM0]+(?:_[SMLH])?)", filename, re.IGNORECASE)
+        quant_match = re.search(
+            r"[_-](Q\d+_[KM0]+(?:_[SMLH])?)", filename, re.IGNORECASE
+        )
         if quant_match:
             quant = f"-{quant_match.group(1).lower()}"
-    
+
     # Convert to lowercase and replace non-alphanumeric with hyphens
     name = re.sub(r"[^a-zA-Z0-9]+", "-", name).lower()
     name = re.sub(r"-+", "-", name).strip("-")
-    
+
     return f"{name}{quant}"
 
 
 def list_gguf_files(repo_id: str) -> list[dict[str, Any]]:
     """
     List GGUF files available in a HuggingFace repository.
-    
+
     Args:
         repo_id: HuggingFace repo ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF")
-        
+
     Returns:
         List of dicts with keys: filename, size
-        
+
     Raises:
         OllamaAPIError: If HF API fails or no GGUF files found
     """
     try:
         from huggingface_hub import list_repo_files, repo_info
-        
+
         # List all files in the repo
         files = list_repo_files(repo_id)
-        
+
         # Filter for GGUF files
         gguf_files = [f for f in files if f.lower().endswith(".gguf")]
-        
+
         if not gguf_files:
             raise OllamaAPIError(f"No GGUF files found in repository '{repo_id}'")
-        
+
         # Get file sizes
         info = repo_info(repo_id)
         result = []
-        
+
         for filename in gguf_files:
             # Find size from sibling files
             size = 0
@@ -327,17 +330,19 @@ def list_gguf_files(repo_id: str) -> list[dict[str, Any]]:
                 if sibling.rfilename == filename:
                     size = sibling.size or 0
                     break
-            
-            result.append({
-                "filename": filename,
-                "size": size,
-            })
-        
+
+            result.append(
+                {
+                    "filename": filename,
+                    "size": size,
+                }
+            )
+
         # Sort by size (descending) for better UX
         result.sort(key=lambda x: x["size"], reverse=True)
-        
+
         return result
-        
+
     except ImportError as e:
         raise OllamaAPIError(
             "huggingface-hub not installed. Install with: uv pip install huggingface-hub"
@@ -355,7 +360,7 @@ def pull_from_huggingface(
 ) -> bool:
     """
     Download a GGUF file from HuggingFace and import it into Ollama.
-    
+
     Args:
         repo_id: HuggingFace repo ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF")
         filename: GGUF filename to download
@@ -363,21 +368,21 @@ def pull_from_huggingface(
         port: Ollama API port (default: 11434)
         progress_callback: Optional callback called with (phase, current, total)
                           phase is "download" or "import"
-        
+
     Returns:
         True if import succeeded
-        
+
     Raises:
         OllamaAPIError: If download or import fails
     """
     try:
         from huggingface_hub import hf_hub_download
         import subprocess
-        
+
         # Download from HuggingFace
         if progress_callback:
             progress_callback("download", 0, 100)
-        
+
         try:
             local_path = hf_hub_download(
                 repo_id=repo_id,
@@ -386,34 +391,36 @@ def pull_from_huggingface(
             )
         except Exception as e:
             raise OllamaAPIError(f"Failed to download from HuggingFace: {e}") from e
-        
+
         if progress_callback:
             progress_callback("download", 100, 100)
-        
+
         # Create modelfile
         if progress_callback:
             progress_callback("import", 0, 100)
-        
+
         modelfile_content = f"FROM {local_path}\n"
-        
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".modelfile", delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".modelfile", delete=False
+        ) as f:
             f.write(modelfile_content)
             modelfile_path = f.name
-        
+
         try:
             # Import into Ollama via CLI (requires podman exec)
             # We'll use the Ollama container name from the service spec
             from airpods import podman
-            
+
             # Copy modelfile into container
             container = "ollama-0"  # Default from config
-            
+
             # First, check if we can reach the Ollama API
             if not ensure_ollama_available(port):
                 raise OllamaAPIError(
                     "Ollama service not available. Start with 'airpods start ollama'"
                 )
-            
+
             # Use podman exec to run ollama create command
             result = subprocess.run(
                 [
@@ -429,20 +436,20 @@ def pull_from_huggingface(
                 capture_output=True,
                 check=False,
             )
-            
+
             if result.returncode != 0:
                 error_msg = result.stderr.decode() if result.stderr else "Unknown error"
                 raise OllamaAPIError(f"Failed to import model: {error_msg}")
-            
+
             if progress_callback:
                 progress_callback("import", 100, 100)
-            
+
             return True
-            
+
         finally:
             # Clean up modelfile
             Path(modelfile_path).unlink(missing_ok=True)
-        
+
     except ImportError as e:
         raise OllamaAPIError(
             "huggingface-hub not installed. Install with: uv pip install huggingface-hub"

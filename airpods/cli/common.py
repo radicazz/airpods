@@ -214,7 +214,7 @@ def format_transfer_label(
 def get_ollama_port() -> int:
     """
     Get the Ollama service port from configuration.
-    
+
     Returns:
         Ollama port number (default: 11434)
     """
@@ -223,6 +223,6 @@ def get_ollama_port() -> int:
     if spec and spec.ports and len(spec.ports) > 0:
         # ports is a list of tuples (host_port, container_port)
         return spec.ports[0][0]
-    
+
     # Fallback to default
     return 11434

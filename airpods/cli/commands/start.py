@@ -345,25 +345,27 @@ def register(app: typer.Typer) -> CommandMap:
             from airpods import ollama as ollama_module
             from airpods.cli.common import get_ollama_port
             from airpods.configuration import get_config
-            
+
             config = get_config()
             auto_pull = config.services.get("ollama", None)
             auto_pull_models = auto_pull.auto_pull_models if auto_pull else []
-            
+
             if auto_pull_models:
                 port = get_ollama_port()
-                
+
                 # Get list of installed models
                 try:
                     installed = ollama_module.list_models(port)
                     installed_names = {m.get("name") for m in installed}
-                    
+
                     # Filter out models that are already installed
                     to_pull = [m for m in auto_pull_models if m not in installed_names]
-                    
+
                     if to_pull:
-                        console.print(f"[info]Auto-pulling {len(to_pull)} model(s)...[/]")
-                        
+                        console.print(
+                            f"[info]Auto-pulling {len(to_pull)} model(s)...[/]"
+                        )
+
                         for model_name in to_pull:
                             try:
                                 console.print(f"  Pulling [accent]{model_name}[/]...")
@@ -375,10 +377,10 @@ def register(app: typer.Typer) -> CommandMap:
                                 )
                     elif verbose:
                         console.print("[info]All auto-pull models already installed[/]")
-                        
+
                 except Exception as e:
                     console.print(f"[warn]Auto-pull failed: {e}[/]")
-        
+
         # Auto-import plugins into Open WebUI if service is healthy
         if (
             webui_specs
