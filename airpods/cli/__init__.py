@@ -24,6 +24,7 @@ from .help import show_root_help
 from .status_view import render_status
 
 app = typer.Typer(
+    name="airpods",
     help=__description__,
     context_settings={"help_option_names": []},
     rich_markup_mode="rich",
