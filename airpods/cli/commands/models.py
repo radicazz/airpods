@@ -11,6 +11,7 @@ from airpods import ollama
 from airpods.logging import console
 
 from ..common import COMMAND_CONTEXT, get_ollama_port
+from ..completions import model_name_completion
 from ..help import command_help_option, maybe_show_command_help
 from ..type_defs import CommandMap
 
@@ -281,7 +282,7 @@ def pull_hf_cmd(
 
 @models_app.command(name="remove", context_settings=COMMAND_CONTEXT)
 def remove_model_cmd(
-    model: str = typer.Argument(..., help="Model name to remove"),
+    model: str = typer.Argument(..., help="Model name to remove", shell_complete=model_name_completion),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     help_: bool = command_help_option(),
 ) -> None:
@@ -314,7 +315,7 @@ def remove_model_cmd(
 
 @models_app.command(name="info", context_settings=COMMAND_CONTEXT)
 def info_model_cmd(
-    model: str = typer.Argument(..., help="Model name"),
+    model: str = typer.Argument(..., help="Model name", shell_complete=model_name_completion),
     help_: bool = command_help_option(),
 ) -> None:
     """Show detailed information about a model."""
