@@ -1,13 +1,28 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.24,<2"]
 build-backend = "hatchling.build"
 
 [project]
 name = "airpods"
-version = "0.12.0"
-description = "Rich, user-friendly CLI for orchestrating local AI services with Podman and UV."
-readme = "README.md"
+version = "0.12.1"
+description = "Rich, user-friendly CLI for orchestrating local AI services with Podman."
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "airpods contributors" }]
+keywords = ["podman", "ollama", "open-webui", "comfyui", "local-ai", "cli"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Utilities",
+]
 dependencies = [
   "typer>=0.9,<0.13",
   "rich>=13.0,<14.0",
@@ -19,15 +34,12 @@ dependencies = [
   "huggingface-hub>=0.20.0,<1.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-  "pytest>=7.0,<9.0",
-  "pytest-mock>=3.0,<4.0",
-  "pytest-cov>=4.0,<6.0",
-  "pre-commit>=3.4,<4.0",
-]
+[project.urls]
+Homepage = "https://github.com/radicazz/airpods"
+Repository = "https://github.com/radicazz/airpods"
+Issues = "https://github.com/radicazz/airpods/issues"
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
   "pytest>=7.0,<9.0",
   "pytest-mock>=3.0,<4.0",
@@ -47,5 +59,5 @@ packages = ["airpods"]
 [tool.hatch.build.targets.wheel.force-include]
 "plugins/open-webui" = "plugins/open-webui"
 
-[tool.uv]
-default-groups = ["dev"]
+[tool.hatch.build.targets.sdist]
+include = ["airpods", "plugins/open-webui", "tests", "README.md", "LICENSE", "pyproject.toml"]

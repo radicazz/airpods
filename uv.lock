@@ -4,7 +4,7 @@ requires-python = ">=3.10"
 
 [[package]]
 name = "airpods"
-version = "0.12.0"
+version = "0.12.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -18,14 +18,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-]
-
-[package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
     { name = "pytest" },
@@ -49,14 +41,6 @@ requires-dist = [
     { name = "typer", specifier = ">=0.9,<0.13" },
 ]
 provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pre-commit", specifier = ">=3.4,<4.0" },
-    { name = "pytest", specifier = ">=7.0,<9.0" },
-    { name = "pytest-cov", specifier = ">=4.0,<6.0" },
-    { name = "pytest-mock", specifier = ">=3.0,<4.0" },
-]
 
 [[package]]
 name = "annotated-types"
