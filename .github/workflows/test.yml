@@ -50,7 +50,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
-  lint:
+  quality:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
@@ -62,5 +62,8 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
-      - name: Check code compiles
-        run: python3 -m compileall airpods
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run pre-commit checks
+        run: uv run pre-commit run --all-files

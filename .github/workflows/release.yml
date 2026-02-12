@@ -44,6 +44,22 @@ jobs:
         run: |
           echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Validate tag version matches pyproject
+        run: |
+          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
+          PROJECT_VERSION=$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          print(data["project"]["version"])
+          PY
+          )
+          if [ "${TAG_VERSION}" != "${PROJECT_VERSION}" ]; then
+            echo "Tag version (${TAG_VERSION}) does not match pyproject version (${PROJECT_VERSION})." >&2
+            exit 1
+          fi
+
       - name: Rename release artifact
         run: |
           mv dist/*.whl dist/airpods-${{ steps.version.outputs.VERSION }}.whl

@@ -73,4 +73,25 @@ airpods state clean --all
 
 # Remove only volumes
 airpods state clean --volumes
+
+# Remove only images without prompts
+airpods state clean --images --force
+
+# Preview what would be removed
+airpods state clean --all --dry-run
 ```
+
+**Options:**
+- `--all, -a`: Remove all targets (pods, volumes, images, configs)
+- `--pods, -p`: Stop and remove service pods/containers
+- `--volumes, -v`: Remove configured container volumes and bind-mounted data directories
+- `--images, -i`: Remove pulled container images
+- `--configs, -c`: Remove config files under `$AIRPODS_HOME/configs`
+- `--force, -f`: Skip interactive confirmation prompts
+- `--dry-run`: Show the cleanup plan without deleting anything
+- `--backup-config / --no-backup-config`: Backup `config.toml` before deleting configs (default: backup enabled)
+
+**Notes:**
+- Running `state clean` without target flags exits with a usage error.
+- `--dry-run` is the safest way to confirm exactly what will be touched.
+- `--all` expands to `--pods --volumes --images --configs`.
