@@ -321,11 +321,14 @@ def _service_spec_from_config(
         pids_limit=service.pids_limit,
         needs_gpu=needs_gpu,
         health_path=service.health.path,
+        health_expected_status=service.health.expected_status,
         force_cpu=service.gpu.force_cpu,
         userns_mode=userns_mode,
         entrypoint=entrypoint,
         command=command,
         cpu_image=cpu_image,
+        memory=service.resources.memory,
+        cpus=service.resources.cpus,
     )
 
 

@@ -23,6 +23,7 @@ from ..common import (
     DEFAULT_STOP_TIMEOUT,
     SERVICE_NAME_ALIASES,
     ensure_runtime_available,
+    get_cli_config,
     manager,
 )
 from ..completions import service_name_completion
@@ -386,6 +387,7 @@ def register(app: typer.Typer) -> CommandMap:
     ) -> None:
         """Remove volumes, images, configs, and user data created by airpods."""
         maybe_show_command_help(ctx, help_)
+        force = force or get_cli_config().auto_confirm
 
         if all_:
             pods = volumes = images = configs = True

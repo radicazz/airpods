@@ -288,7 +288,8 @@ def ping_service(spec: ServiceSpec, port: Optional[int]) -> str:
         code = resp.status
         conn.close()
         elapsed_ms = (time.perf_counter() - start) * 1000
-        if 200 <= code < 400:
+        expected_start, expected_end = spec.health_expected_status
+        if expected_start <= code <= expected_end:
             return f"[ok]{code} ({elapsed_ms:.0f} ms)"
         return f"[warn]{code} ({elapsed_ms:.0f} ms)"
     except (
@@ -325,6 +326,7 @@ def check_service_health(spec: ServiceSpec, port: Optional[int]) -> bool:
         resp = conn.getresponse()
         code = resp.status
         conn.close()
-        return 200 <= code < 400
+        expected_start, expected_end = spec.health_expected_status
+        return expected_start <= code <= expected_end
     except Exception:
         return False

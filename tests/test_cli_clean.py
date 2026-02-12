@@ -222,6 +222,19 @@ def test_clean_requires_confirmation_without_force(
     mock_confirm.assert_called_once()
 
 
+@patch("airpods.cli.commands.clean.get_cli_config")
+@patch("airpods.cli.commands.clean.ui.confirm_action")
+def test_clean_auto_confirm_from_config_skips_prompt(
+    mock_confirm, mock_get_cli_config, mock_manager, mock_resolve_services, mock_podman
+):
+    mock_get_cli_config.return_value = type("Config", (), {"auto_confirm": True})
+    mock_manager.runtime.pod_exists.return_value = True
+
+    result = runner.invoke(app, ["state", "clean", "--pods"])
+    assert result.exit_code == 0
+    mock_confirm.assert_not_called()
+
+
 @patch("airpods.cli.commands.clean.ui.confirm_action")
 def test_clean_cancelled_by_user(
     mock_confirm, mock_manager, mock_resolve_services, mock_podman

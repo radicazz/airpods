@@ -134,3 +134,19 @@ def test_llamacpp_command_args_rendering():
         "8",
     ]
     assert "--debug" not in spec.command
+
+
+def test_service_spec_includes_health_status_range_and_resources():
+    config_dict = deepcopy(DEFAULT_CONFIG_DICT)
+    config_dict["services"]["open-webui"]["health"]["expected_status"] = [200, 399]
+    config_dict["services"]["open-webui"]["resources"]["memory"] = "2g"
+    config_dict["services"]["open-webui"]["resources"]["cpus"] = "1.5"
+
+    config = AirpodsConfig.from_dict(config_dict)
+    spec = _service_spec_from_config(
+        "open-webui", config.services["open-webui"], config
+    )
+
+    assert spec.health_expected_status == (200, 399)
+    assert spec.memory == "2g"
+    assert spec.cpus == "1.5"

@@ -98,6 +98,27 @@ def test_start_service_force_cpu_override(manager: ServiceManager):
     assert manager.runtime.run_container.call_args.kwargs["gpu"] is False
 
 
+def test_start_service_passes_userns_and_resource_limits(manager: ServiceManager):
+    spec = ServiceSpec(
+        name="svc",
+        pod="pod",
+        container="ctr",
+        image="img",
+        userns_mode="keep-id",
+        memory="2g",
+        cpus="1.5",
+    )
+    manager.runtime.ensure_pod.return_value = False
+    manager.runtime.run_container.return_value = False
+
+    manager.start_service(spec, gpu_available=False)
+
+    kwargs = manager.runtime.run_container.call_args.kwargs
+    assert kwargs["userns_mode"] == "keep-id"
+    assert kwargs["memory"] == "2g"
+    assert kwargs["cpus"] == "1.5"
+
+
 def test_report_environment_skips_dependency_checks():
     runtime = MagicMock()
     mgr = ServiceManager(

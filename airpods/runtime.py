@@ -56,6 +56,8 @@ class ContainerRuntime(Protocol):
         userns_mode: Optional[str] = None,
         entrypoint: Optional[str] = None,
         command: Optional[List[str]] = None,
+        memory: Optional[str] = None,
+        cpus: Optional[str] = None,
     ) -> bool:
         """Run a container in a pod.
 
@@ -198,6 +200,8 @@ class PodmanRuntime:
         userns_mode: Optional[str] = None,
         entrypoint: Optional[str] = None,
         command: Optional[List[str]] = None,
+        memory: Optional[str] = None,
+        cpus: Optional[str] = None,
     ) -> bool:
         try:
             return podman.run_container(
@@ -213,6 +217,8 @@ class PodmanRuntime:
                 userns_mode=userns_mode,
                 entrypoint=entrypoint,
                 command=command,
+                memory=memory,
+                cpus=cpus,
             )
         except podman.PodmanError as exc:
             raise ContainerRuntimeError(str(exc)) from exc
@@ -351,6 +357,8 @@ class DockerRuntime:
         userns_mode: Optional[str] = None,
         entrypoint: Optional[str] = None,
         command: Optional[List[str]] = None,
+        memory: Optional[str] = None,
+        cpus: Optional[str] = None,
     ) -> bool:
         try:
             return docker.run_container(
@@ -366,6 +374,8 @@ class DockerRuntime:
                 userns_mode=userns_mode,
                 entrypoint=entrypoint,
                 command=command,
+                memory=memory,
+                cpus=cpus,
             )
         except docker.DockerError as exc:
             raise ContainerRuntimeError(str(exc)) from exc

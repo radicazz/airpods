@@ -56,11 +56,14 @@ class ServiceSpec:
     pids_limit: int = 2048
     needs_gpu: bool = False
     health_path: Optional[str] = None
+    health_expected_status: Tuple[int, int] = (200, 299)
     force_cpu: bool = False
     userns_mode: Optional[str] = None
     entrypoint: Optional[str] = None
     command: Optional[List[str]] = None
     cpu_image: Optional[str] = None
+    memory: Optional[str] = None
+    cpus: Optional[str] = None
 
     def runtime_env(self) -> Dict[str, str]:
         """Merge static env with runtime env from factory."""
@@ -293,9 +296,11 @@ class ServiceManager:
             restart_policy=self.restart_policy,
             gpu_device_flag=self.gpu_device_flag,
             pids_limit=spec.pids_limit,
-            userns_mode=None,
+            userns_mode=spec.userns_mode,
             entrypoint=spec.entrypoint,
             command=spec.command,
+            memory=spec.memory,
+            cpus=spec.cpus,
         )
         return ServiceStartResult(
             spec=spec, pod_created=pod_created, container_replaced=container_replaced

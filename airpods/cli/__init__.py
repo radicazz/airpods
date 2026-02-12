@@ -16,6 +16,7 @@ from .common import (
     DEFAULT_PING_TIMEOUT,
     DEFAULT_STOP_TIMEOUT,
     ensure_runtime_available,
+    get_cli_config,
     manager as _manager,
     print_version,
     resolve_services,
@@ -45,7 +46,7 @@ def _root_command(
         is_eager=True,
     ),
     verbose: bool = typer.Option(
-        False,
+        get_cli_config().verbose,
         "-V",
         "--verbose",
         help="Show detailed output and progress information.",

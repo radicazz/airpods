@@ -417,6 +417,7 @@ def register(app: typer.Typer) -> CommandMap:
         config_module.ENABLE_COMFY_CUDA_LOG = True
 
         cli_config = get_cli_config()
+        yes = yes or bool(getattr(cli_config, "auto_confirm", False))
         max_concurrent_pulls = 1 if sequential else cli_config.max_concurrent_pulls
 
         if pre_fetch:

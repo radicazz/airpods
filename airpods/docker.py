@@ -271,6 +271,8 @@ def run_container(
     userns_mode: Optional[str] = None,
     entrypoint: Optional[str] = None,
     command: Optional[List[str]] = None,
+    memory: Optional[str] = None,
+    cpus: Optional[str] = None,
 ) -> bool:
     existed = container_exists(name)
 
@@ -307,6 +309,10 @@ def run_container(
 
     if userns_mode:
         args.extend(["--userns", userns_mode])
+    if memory:
+        args.extend(["--memory", memory])
+    if cpus:
+        args.extend(["--cpus", cpus])
 
     if entrypoint:
         args.extend(["--entrypoint", entrypoint])
