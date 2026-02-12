@@ -685,15 +685,13 @@ def register(app: typer.Typer) -> CommandMap:
                 failed_services.append(spec.name)
                 continue
 
-        # Install custom node requirements once ComfyUI is running.
-        _maybe_install_custom_node_requirements(
-            specs, nodes=custom_nodes_list, verbose=verbose
-        )
-
         # If we're not waiting for readiness, return after pods are launched.
         if not wait:
             # Even without --wait, attempt to auto-import Open WebUI plugins once DB exists.
             _maybe_import_webui_plugins(specs, cli_config=cli_config, verbose=verbose)
+            _maybe_install_custom_node_requirements(
+                specs, nodes=custom_nodes_list, verbose=verbose
+            )
 
             started = [
                 spec.name for spec in specs_to_start if spec.name not in failed_services
@@ -889,6 +887,12 @@ def register(app: typer.Typer) -> CommandMap:
         # Auto-import plugins into Open WebUI if service is healthy
         if "open-webui" in service_urls and "open-webui" not in failed_services:
             _maybe_import_webui_plugins(specs, cli_config=cli_config, verbose=verbose)
+
+        # Re-attempt after readiness checks so requirements are installed when
+        # ComfyUI startup is slower than container launch.
+        _maybe_install_custom_node_requirements(
+            specs, nodes=custom_nodes_list, verbose=verbose
+        )
 
     return {"start": start}
 

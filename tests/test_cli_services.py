@@ -250,3 +250,56 @@ def test_start_auto_confirm_from_config_skips_download_prompt(
     assert result.exit_code == 0
     mock_confirm_downloads.assert_not_called()
     mock_pull.assert_called_once_with([spec], max_concurrent=3, verbose=False)
+
+
+@patch("airpods.cli.commands.start._maybe_install_custom_node_requirements")
+@patch("airpods.cli.commands.start._maybe_import_webui_plugins")
+@patch("airpods.cli.commands.start._maybe_prepare_custom_nodes")
+@patch("airpods.cli.commands.start._maybe_sync_plugins")
+@patch("airpods.cli.commands.start.collect_host_ports")
+@patch("airpods.cli.commands.start.detect_gpu")
+@patch("airpods.cli.commands.start.manager")
+@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.commands.start.get_cli_config")
+@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.resolve_services")
+def test_start_wait_retries_custom_node_requirements_after_readiness(
+    mock_resolve,
+    mock_ensure,
+    mock_get_cli_config,
+    mock_pull,
+    mock_manager,
+    mock_detect_gpu,
+    mock_collect_ports,
+    mock_sync_plugins,
+    mock_prepare_nodes,
+    mock_import_plugins,
+    mock_install_requirements,
+    runner,
+):
+    spec = _make_mock_spec()
+    mock_resolve.return_value = [spec]
+    mock_get_cli_config.return_value = type(
+        "Config",
+        (),
+        {
+            "max_concurrent_pulls": 3,
+            "startup_timeout": 10,
+            "startup_check_interval": 0.01,
+            "auto_confirm": True,
+        },
+    )
+    mock_detect_gpu.return_value = (False, "CPU")
+    mock_sync_plugins.return_value = (0, 0)
+    mock_prepare_nodes.return_value = ([], 0)
+    mock_collect_ports.return_value = [11434]
+    mock_manager.ensure_volumes.return_value = []
+    mock_manager.container_exists.return_value = False
+    mock_manager.runtime.image_exists.return_value = False
+    mock_manager.pod_status_rows.return_value = {"pod": {"Status": "Running"}}
+    mock_manager.service_ports.return_value = {}
+
+    result = runner.invoke(app, ["start", "--wait"])
+
+    assert result.exit_code == 0
+    mock_install_requirements.assert_called_once()
