@@ -157,7 +157,14 @@ def _collect_cleanup_targets(
                 else:
                     configured_volumes.add(mount.source)
         if include_orphans:
-            plan.volumes = sorted(existing_volumes)
+            prefixed_orphans = {
+                name for name in existing_volumes if name.startswith("airpods_")
+            }
+            plan.volumes = sorted(
+                prefixed_orphans.union(
+                    existing_volumes.intersection(configured_volumes)
+                )
+            )
         else:
             plan.volumes = sorted(existing_volumes.intersection(configured_volumes))
 

@@ -126,14 +126,10 @@ def ensure_volume(name: str) -> bool:
 
 
 def list_volumes() -> List[str]:
-    """List all Docker volumes matching airpods pattern."""
+    """List all Docker volumes."""
     try:
         proc = _run(["volume", "ls", "--format", "{{.Name}}"])
-        return [
-            line.strip()
-            for line in proc.stdout.splitlines()
-            if line.strip().startswith("airpods_")
-        ]
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
     except subprocess.CalledProcessError:
         return []
 

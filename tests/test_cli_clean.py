@@ -364,3 +364,59 @@ def test_clean_service_scoped_configs_only_removes_webui_secret(
     assert result.exit_code == 0
     assert config_file.exists()
     assert not secret_file.exists()
+
+
+def test_clean_service_scoped_named_volume_without_airpods_prefix(
+    mock_manager, mock_podman
+):
+    mock_manager.runtime.list_volumes.return_value = [
+        "custom_ollama_data",
+        "unrelated_data",
+    ]
+
+    spec = ServiceSpec(
+        name="ollama",
+        pod="ollama",
+        container="ollama-0",
+        image="docker.io/ollama/ollama:latest",
+        volumes=[VolumeMount("custom_ollama_data", "/root/.ollama")],
+    )
+
+    with patch(
+        "airpods.cli.commands.clean._resolve_cleanup_specs", return_value=[spec]
+    ):
+        result = runner.invoke(
+            app, ["state", "clean", "ollama", "--volumes", "--force"]
+        )
+
+    assert result.exit_code == 0
+    mock_manager.runtime.remove_volume.assert_called_once_with("custom_ollama_data")
+
+
+def test_clean_all_volumes_keeps_unrelated_non_airpods_volumes(
+    mock_manager, mock_podman
+):
+    mock_manager.runtime.list_volumes.return_value = [
+        "airpods_ollama_data",
+        "custom_ollama_data",
+        "unrelated_data",
+    ]
+
+    spec = ServiceSpec(
+        name="ollama",
+        pod="ollama",
+        container="ollama-0",
+        image="docker.io/ollama/ollama:latest",
+        volumes=[VolumeMount("custom_ollama_data", "/root/.ollama")],
+    )
+
+    with patch(
+        "airpods.cli.commands.clean._resolve_cleanup_specs", return_value=[spec]
+    ):
+        result = runner.invoke(app, ["state", "clean", "--volumes", "--force"])
+
+    assert result.exit_code == 0
+    calls = [call.args[0] for call in mock_manager.runtime.remove_volume.call_args_list]
+    assert "airpods_ollama_data" in calls
+    assert "custom_ollama_data" in calls
+    assert "unrelated_data" not in calls
