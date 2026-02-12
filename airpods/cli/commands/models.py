@@ -261,9 +261,10 @@ def _detect_model_source(model_spec: str) -> str:
     if "huggingface.co" in model_spec.lower():
         return "huggingface"
 
-    # For namespace/model patterns (like "huihui_ai/qwen3-abliterated"),
-    # default to Ollama since it's our primary integration and supports this format.
-    # Users can override with --source huggingface if needed.
+    # Namespace/model patterns (owner/repo) are treated as HuggingFace repos.
+    if "/" in model_spec:
+        return "huggingface"
+
     return "ollama"
 
 
@@ -527,6 +528,20 @@ def remove_model_cmd(
         raise typer.Exit(1)
 
 
+@models_app.command(name="rm", context_settings=COMMAND_CONTEXT)
+def remove_model_alias(
+    ctx: typer.Context,
+    help_: bool = command_help_option(),
+    model: str = typer.Argument(
+        ..., help="Model name to remove", shell_complete=model_name_completion
+    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+) -> None:
+    """Alias for models remove."""
+
+    remove_model_cmd(ctx, help_, model, force)
+
+
 @models_app.command(name="info", context_settings=COMMAND_CONTEXT)
 def info_model_cmd(
     ctx: typer.Context,
@@ -673,6 +688,7 @@ def search_models_cmd(
 def register(app: typer.Typer) -> CommandMap:
     """Register the models command and its subcommands."""
     app.add_typer(models_app, name="models")
+    app.add_typer(models_app, name="model", hidden=True)
 
     # Return empty dict since this is a typer sub-app
     # Aliases will be handled in common.py

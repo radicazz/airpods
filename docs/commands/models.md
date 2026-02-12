@@ -98,6 +98,44 @@ airpods models info llama3.2
 
 **Shell completion:** Tab-completion for model names when Ollama is running.
 
+### `airpods models search <query>`
+
+Search HuggingFace GGUF repositories by name/keywords.
+
+```bash
+airpods models search llama
+airpods models search qwen --limit 10
+```
+
+**Options:**
+- `--limit, -l`: Maximum number of results (default: `5`)
+
+### `airpods models gguf list`
+
+List GGUF files stored in the local shared GGUF directory.
+
+```bash
+airpods models gguf list
+airpods models gguf ls
+```
+
+### `airpods models gguf pull <url>`
+
+Download a GGUF file directly to the shared GGUF store.
+
+```bash
+airpods models gguf pull https://example.com/model.gguf
+airpods models gguf pull https://example.com/model.gguf --name my-model.gguf
+```
+
+### `airpods models gguf remove <filename>`
+
+Delete a GGUF file from the shared GGUF store.
+
+```bash
+airpods models gguf remove my-model.gguf
+```
+
 ## Auto-Pull on Startup
 
 Configure models to be automatically pulled when Ollama starts:

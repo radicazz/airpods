@@ -116,6 +116,31 @@ def test_models_ls_alias(mock_list, mock_ensure, runner):
     assert "No models installed" in result.output
 
 
+@patch("airpods.cli.commands.models.ensure_ollama_running")
+@patch("airpods.cli.commands.models.ollama.list_models")
+def test_model_singular_alias(mock_list, mock_ensure, runner):
+    """'model' aliases 'models'."""
+    mock_ensure.return_value = 11434
+    mock_list.return_value = []
+
+    result = runner.invoke(app, ["model", "list"])
+    assert result.exit_code == 0
+    assert "No models installed" in result.output
+
+
+@patch("airpods.cli.commands.models.ensure_ollama_running")
+@patch("airpods.cli.commands.models.ollama.list_models")
+@patch("airpods.cli.commands.models.ollama.delete_model")
+def test_models_rm_alias(mock_delete, mock_list, mock_ensure, runner):
+    """'models rm' aliases 'models remove'."""
+    mock_ensure.return_value = 11434
+    mock_list.return_value = [{"name": "llama3.2"}]
+
+    result = runner.invoke(app, ["models", "rm", "llama3.2", "--force"])
+    assert result.exit_code == 0
+    mock_delete.assert_called_once_with("llama3.2", 11434)
+
+
 @patch("airpods.cli.commands.workflows.comfyui_workflows_dir")
 def test_workflows_ls_alias(mock_dir, runner, tmp_path):
     """'workflows ls' aliases 'workflows list'."""
