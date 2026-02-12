@@ -58,23 +58,51 @@ class TestGetRuntime:
         ):
             get_runtime("auto")
 
-    def test_get_runtime_podman_returns_podman(self):
+    def test_get_runtime_podman_returns_podman(self, monkeypatch):
         """get_runtime('podman') should return PodmanRuntime."""
+        monkeypatch.setattr(
+            "shutil.which", lambda cmd: "/usr/bin/podman" if cmd == "podman" else None
+        )
         runtime = get_runtime("podman")
         assert isinstance(runtime, PodmanRuntime)
 
-    def test_get_runtime_docker_returns_docker(self):
+    def test_get_runtime_docker_returns_docker(self, monkeypatch):
         """get_runtime('docker') should return DockerRuntime."""
+        monkeypatch.setattr(
+            "shutil.which", lambda cmd: "/usr/bin/docker" if cmd == "docker" else None
+        )
         runtime = get_runtime("docker")
         assert isinstance(runtime, DockerRuntime)
+
+    def test_get_runtime_podman_raises_if_unavailable(self, monkeypatch):
+        """get_runtime('podman') should fail fast if podman is unavailable."""
+        monkeypatch.setattr("shutil.which", lambda cmd: None)
+        with pytest.raises(
+            ContainerRuntimeError,
+            match="Runtime preference is set to 'podman' but Podman is not installed.",
+        ):
+            get_runtime("podman")
+
+    def test_get_runtime_docker_raises_if_unavailable(self, monkeypatch):
+        """get_runtime('docker') should fail fast if docker is unavailable."""
+        monkeypatch.setattr("shutil.which", lambda cmd: None)
+        with pytest.raises(
+            ContainerRuntimeError,
+            match="Runtime preference is set to 'docker' but Docker is not installed.",
+        ):
+            get_runtime("docker")
 
     def test_get_runtime_unknown_raises_error(self):
         """get_runtime with unknown value should raise ContainerRuntimeError."""
         with pytest.raises(ContainerRuntimeError, match="Unknown runtime 'foobar'"):
             get_runtime("foobar")
 
-    def test_runtime_name_property(self):
+    def test_runtime_name_property(self, monkeypatch):
         """Test runtime_name property returns correct values."""
+        monkeypatch.setattr(
+            "shutil.which",
+            lambda cmd: f"/usr/bin/{cmd}" if cmd in ("podman", "docker") else None,
+        )
         podman_runtime = get_runtime("podman")
         assert podman_runtime.runtime_name == "podman"
 

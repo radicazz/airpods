@@ -485,9 +485,17 @@ def get_runtime(prefer: str | None) -> ContainerRuntime:
         ContainerRuntimeError: If the requested runtime is unsupported or unavailable.
     """
     if prefer == "podman":
+        if not _runtime_available("podman"):
+            raise ContainerRuntimeError(
+                "Runtime preference is set to 'podman' but Podman is not installed."
+            )
         return PodmanRuntime()
 
     if prefer == "docker":
+        if not _runtime_available("docker"):
+            raise ContainerRuntimeError(
+                "Runtime preference is set to 'docker' but Docker is not installed."
+            )
         return DockerRuntime()
 
     if prefer in (None, "auto"):
