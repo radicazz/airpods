@@ -15,6 +15,16 @@ from airpods.state import volumes_dir
 
 WEBUI_DB_PATH = "/app/backend/data/webui.db"
 AIRPODS_OWNER_ID = "airpods-system"
+SQLITE_LOCK_MARKERS = (
+    "database is locked",
+    "database table is locked",
+    "sqlite_busy",
+)
+SQLITE_IMPORT_MAX_ATTEMPTS = 6
+SQLITE_IMPORT_INITIAL_RETRY_DELAY = 0.25
+SQLITE_IMPORT_MAX_RETRY_DELAY = 2.0
+SQLITE_IMPORT_BUSY_TIMEOUT_MS = 30_000
+SQLITE_IMPORT_EXEC_TIMEOUT_SECONDS = 35
 
 
 class PluginModule(NamedTuple):
@@ -24,6 +34,25 @@ class PluginModule(NamedTuple):
     path: Path
     content: str
     function_type: str
+
+
+def _is_sqlite_lock_error(output: str) -> bool:
+    """Return True when output suggests a transient SQLite lock error."""
+
+    lowered = (output or "").lower()
+    return any(marker in lowered for marker in SQLITE_LOCK_MARKERS)
+
+
+def _is_sqlite_retryable_error(
+    output: str = "",
+    *,
+    error: BaseException | None = None,
+) -> bool:
+    """Return True for transient lock-contention errors worth retrying."""
+
+    if isinstance(error, subprocess.TimeoutExpired):
+        return True
+    return _is_sqlite_lock_error(output)
 
 
 def _plugin_id_for_path(base_dir: Path, plugin_path: Path) -> str:
@@ -620,29 +649,59 @@ def import_plugins_to_webui(
 
             # Execute via runtime abstraction
             python_code = (
-                f"import sqlite3; "
-                f"conn = sqlite3.connect('{WEBUI_DB_PATH}'); "
-                f"cursor = conn.cursor(); "
+                "import sqlite3; "
+                f"conn = sqlite3.connect('{WEBUI_DB_PATH}', timeout=30); "
+                f"conn.execute('PRAGMA busy_timeout = {SQLITE_IMPORT_BUSY_TIMEOUT_MS}'); "
+                "cursor = conn.cursor(); "
                 f"cursor.execute({repr(sql)}); "
-                f"conn.commit(); "
+                "conn.commit(); "
                 f"print('Imported {function_id}:', cursor.rowcount); "
-                f"conn.close()"
+                "conn.close()"
             )
 
-            result = runtime.exec_in_container(
-                container_name,
-                ["python3", "-c", python_code],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            delay = SQLITE_IMPORT_INITIAL_RETRY_DELAY
+            for attempt in range(1, SQLITE_IMPORT_MAX_ATTEMPTS + 1):
+                try:
+                    result = runtime.exec_in_container(
+                        container_name,
+                        ["python3", "-c", python_code],
+                        capture_output=True,
+                        text=True,
+                        timeout=SQLITE_IMPORT_EXEC_TIMEOUT_SECONDS,
+                        check=False,
+                    )
+                except Exception as exc:
+                    if (
+                        attempt < SQLITE_IMPORT_MAX_ATTEMPTS
+                        and _is_sqlite_retryable_error(str(exc), error=exc)
+                    ):
+                        time.sleep(delay)
+                        delay = min(delay * 2, SQLITE_IMPORT_MAX_RETRY_DELAY)
+                        continue
+                    raise
 
-            if result.returncode == 0 and "Imported" in result.stdout:
-                imported += 1
-            else:
-                console.print(
-                    f"[warn]Failed to import {function_id}: {result.stderr}[/]"
-                )
+                stdout = result.stdout or ""
+                stderr = result.stderr or ""
+                details = "\n".join(part for part in (stdout, stderr) if part).strip()
+
+                if result.returncode == 0 and "Imported" in stdout:
+                    imported += 1
+                    break
+
+                if attempt < SQLITE_IMPORT_MAX_ATTEMPTS and _is_sqlite_retryable_error(
+                    details
+                ):
+                    time.sleep(delay)
+                    delay = min(delay * 2, SQLITE_IMPORT_MAX_RETRY_DELAY)
+                    continue
+
+                if details:
+                    console.print(f"[warn]Failed to import {function_id}: {details}[/]")
+                else:
+                    console.print(
+                        f"[warn]Failed to import {function_id}: exit code {result.returncode}[/]"
+                    )
+                break
 
         except Exception as e:
             console.print(f"[error]Error importing {module.path.name}: {e}[/]")

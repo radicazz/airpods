@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from textwrap import dedent
 
@@ -84,6 +85,119 @@ def test_import_functions_uses_container(
     assert captured["cmd"][2] == "custom-container"
     assert "user_id = excluded.user_id" in captured["cmd"][-1]
     assert len(calls) == 1
+
+
+def test_import_functions_retries_when_database_locked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    plugin_dir = tmp_path
+    (plugin_dir / "gamma.py").write_text(
+        dedent(
+            """
+            class Filter:
+                def inlet(self, body, __user__=None):
+                    return body
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(plugins.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    calls: list[dict[str, object]] = []
+
+    class DummyResult:
+        def __init__(
+            self,
+            *,
+            returncode: int,
+            stdout: str = "",
+            stderr: str = "",
+        ) -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    class MockRuntime:
+        def exec_in_container(self, container, cmd, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return DummyResult(
+                    returncode=1,
+                    stdout=(
+                        "Traceback (most recent call last):\n"
+                        "sqlite3.OperationalError: database is locked"
+                    ),
+                )
+            return DummyResult(returncode=0, stdout="Imported gamma: 1")
+
+    imported = plugins.import_plugins_to_webui(
+        MockRuntime(),
+        plugin_dir,
+        admin_user_id="owner",
+        container_name="custom-container",
+    )
+
+    assert imported == 1
+    assert len(calls) == 2
+    assert calls[0]["check"] is False
+    assert sleeps == [plugins.SQLITE_IMPORT_INITIAL_RETRY_DELAY]
+
+
+def test_import_functions_retries_when_exec_times_out(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    plugin_dir = tmp_path
+    (plugin_dir / "gamma.py").write_text(
+        dedent(
+            """
+            class Filter:
+                def inlet(self, body, __user__=None):
+                    return body
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(plugins.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    calls: list[dict[str, object]] = []
+
+    class DummyResult:
+        def __init__(
+            self,
+            *,
+            returncode: int,
+            stdout: str = "",
+            stderr: str = "",
+        ) -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    class MockRuntime:
+        def exec_in_container(self, container, cmd, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise subprocess.TimeoutExpired(
+                    cmd=cmd,
+                    timeout=plugins.SQLITE_IMPORT_EXEC_TIMEOUT_SECONDS,
+                )
+            return DummyResult(returncode=0, stdout="Imported gamma: 1")
+
+    imported = plugins.import_plugins_to_webui(
+        MockRuntime(),
+        plugin_dir,
+        admin_user_id="owner",
+        container_name="custom-container",
+    )
+
+    assert imported == 1
+    assert len(calls) == 2
+    assert calls[0]["check"] is False
+    assert sleeps == [plugins.SQLITE_IMPORT_INITIAL_RETRY_DELAY]
 
 
 def test_list_available_plugins_discovers_nested_filters(
