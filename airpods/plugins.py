@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import NamedTuple
 
+import requests
+
 from airpods.logging import console
 from airpods.paths import detect_repo_root
 from airpods.state import volumes_dir
@@ -25,6 +27,11 @@ SQLITE_IMPORT_INITIAL_RETRY_DELAY = 0.25
 SQLITE_IMPORT_MAX_RETRY_DELAY = 2.0
 SQLITE_IMPORT_BUSY_TIMEOUT_MS = 30_000
 SQLITE_IMPORT_EXEC_TIMEOUT_SECONDS = 35
+
+DEFAULT_ADMIN_EMAIL = "admin@airpods"
+DEFAULT_ADMIN_PASSWORD = "admin"
+WEBUI_API_CONNECT_TIMEOUT = 5.0
+WEBUI_API_READ_TIMEOUT = 10.0
 
 
 class PluginModule(NamedTuple):
@@ -424,16 +431,16 @@ import sqlite3
 import time
 
 DB_PATH = r'{WEBUI_DB_PATH}'
-ADMIN_EMAIL = 'admin@airpods'
+ADMIN_EMAIL = '{DEFAULT_ADMIN_EMAIL}'
 
 try:
     from passlib.context import CryptContext
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    hashed = pwd_context.hash("admin")
+    hashed = pwd_context.hash("{DEFAULT_ADMIN_PASSWORD}")
 except Exception:
     # Fallback to bcrypt directly if passlib not available
     import bcrypt
-    hashed = bcrypt.hashpw("admin".encode(), bcrypt.gensalt()).decode()
+    hashed = bcrypt.hashpw("{DEFAULT_ADMIN_PASSWORD}".encode(), bcrypt.gensalt()).decode()
 
 try:
     conn = sqlite3.connect(DB_PATH)
@@ -566,7 +573,7 @@ def resolve_plugin_owner_user_id(
             admin_id = _ensure_default_admin(runtime, container_name)
             if admin_id:
                 console.print(
-                    "[info]Created default admin account: admin@airpods / admin "
+                    f"[info]Created default admin account: {DEFAULT_ADMIN_EMAIL} / {DEFAULT_ADMIN_PASSWORD} "
                     "(change password in Settings)[/]"
                 )
                 return admin_id
@@ -584,12 +591,65 @@ def resolve_plugin_owner_user_id(
     return "system"
 
 
+def _webui_signin(base_url: str, email: str, password: str) -> str | None:
+    """Obtain a JWT bearer token from Open WebUI via the signin endpoint.
+
+    Returns the token string on success, or None on any failure (connection
+    error, wrong credentials, unexpected response shape, etc.). The caller
+    is responsible for graceful degradation when None is returned.
+    """
+    url = f"{base_url.rstrip('/')}/api/v1/auths/signin"
+    try:
+        response = requests.post(
+            url,
+            json={"email": email, "password": password},
+            timeout=(WEBUI_API_CONNECT_TIMEOUT, WEBUI_API_READ_TIMEOUT),
+        )
+        response.raise_for_status()
+        token = response.json().get("token")
+        return token if isinstance(token, str) and token else None
+    except Exception:
+        return None
+
+
+def reload_functions_via_api(
+    base_url: str,
+    token: str,
+    modules: list[PluginModule],
+) -> int:
+    """Push each module into Open WebUI's live function cache via the update endpoint.
+
+    Calling POST /api/v1/functions/id/{id}/update causes OWU to re-exec the
+    function source and refresh its in-memory state — without this, functions
+    written directly to SQLite only become active after an OWU restart.
+
+    Returns the number of functions successfully reloaded. Per-module failures
+    are silently swallowed; the DB write already succeeded.
+    """
+    reloaded = 0
+    headers = {"Authorization": f"Bearer {token}"}
+    for module in modules:
+        url = f"{base_url.rstrip('/')}/api/v1/functions/id/{module.id}/update"
+        try:
+            response = requests.post(
+                url,
+                json={"id": module.id, "content": module.content},
+                headers=headers,
+                timeout=(WEBUI_API_CONNECT_TIMEOUT, WEBUI_API_READ_TIMEOUT),
+            )
+            response.raise_for_status()
+            reloaded += 1
+        except Exception:
+            pass
+    return reloaded
+
+
 def import_plugins_to_webui(
     runtime,
     plugins_dir: Path,
     admin_user_id: str = "system",
     container_name: str = "open-webui-0",
-) -> int:
+) -> list[PluginModule]:
     """Import plugins directly into Open WebUI database via SQL.
 
     This bypasses the API entirely and inserts functions directly into
@@ -602,13 +662,13 @@ def import_plugins_to_webui(
         container_name: Name of the Open WebUI container
 
     Returns:
-        Number of plugins successfully imported
+        List of PluginModule objects that were successfully imported into the database.
     """
     if not plugins_dir.exists():
         console.print(f"[warn]Plugins directory not found: {plugins_dir}[/]")
-        return 0
+        return []
 
-    imported = 0
+    imported: list[PluginModule] = []
     modules = _discover_function_plugins(plugins_dir)
     timestamp = int(time.time())
 
@@ -691,7 +751,7 @@ def import_plugins_to_webui(
                 details = "\n".join(part for part in (stdout, stderr) if part).strip()
 
                 if result.returncode == 0 and "Imported" in stdout:
-                    imported += 1
+                    imported.append(module)
                     break
 
                 if attempt < SQLITE_IMPORT_MAX_ATTEMPTS and _is_sqlite_retryable_error(

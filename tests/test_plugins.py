@@ -81,7 +81,8 @@ def test_import_functions_uses_container(
         container_name="custom-container",
     )
 
-    assert imported == 1
+    assert len(imported) == 1
+    assert imported[0].id == "gamma"
     assert captured["cmd"][2] == "custom-container"
     assert "user_id = excluded.user_id" in captured["cmd"][-1]
     assert len(calls) == 1
@@ -139,7 +140,7 @@ def test_import_functions_retries_when_database_locked(
         container_name="custom-container",
     )
 
-    assert imported == 1
+    assert len(imported) == 1
     assert len(calls) == 2
     assert calls[0]["check"] is False
     assert sleeps == [plugins.SQLITE_IMPORT_INITIAL_RETRY_DELAY]
@@ -194,7 +195,7 @@ def test_import_functions_retries_when_exec_times_out(
         container_name="custom-container",
     )
 
-    assert imported == 1
+    assert len(imported) == 1
     assert len(calls) == 2
     assert calls[0]["check"] is False
     assert sleeps == [plugins.SQLITE_IMPORT_INITIAL_RETRY_DELAY]
@@ -395,3 +396,189 @@ def test_sync_comfyui_plugins_skips_non_package_dirs(
 
     assert synced == 0
     assert not (target_root / "comfyui_custom_nodes" / "not_a_package").exists()
+
+
+def test_import_plugins_to_webui_returns_list_of_modules(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from textwrap import dedent
+
+    plugin_dir = tmp_path
+    (plugin_dir / "myfilter.py").write_text(
+        dedent("""
+        class Filter:
+            def inlet(self, body, __user__=None):
+                return body
+        """),
+        encoding="utf-8",
+    )
+
+    class DummyResult:
+        returncode = 0
+        stdout = "Imported myfilter: 1"
+        stderr = ""
+
+    class MockRuntime:
+        def exec_in_container(self, container, cmd, **kwargs):  # type: ignore[no-untyped-def]
+            return DummyResult()
+
+    result = plugins.import_plugins_to_webui(
+        MockRuntime(), plugin_dir, admin_user_id="owner", container_name="test"
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].id == "myfilter"
+    assert result[0].function_type == "filter"
+
+
+def test_webui_signin_returns_token_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MockResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return {"token": "abc123"}
+
+    calls: list[dict] = []
+
+    def mock_post(
+        url: str, json: dict | None = None, timeout: object = None, **kwargs: object
+    ) -> MockResponse:
+        calls.append({"url": url, "json": json})
+        return MockResponse()
+
+    monkeypatch.setattr(plugins.requests, "post", mock_post)
+
+    token = plugins._webui_signin("http://localhost:3000", "admin@airpods", "admin")
+
+    assert token == "abc123"
+    assert len(calls) == 1
+    assert calls[0]["url"] == "http://localhost:3000/api/v1/auths/signin"
+    assert calls[0]["json"] == {"email": "admin@airpods", "password": "admin"}
+
+
+def test_webui_signin_returns_none_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_post(url: str, **kwargs: object) -> None:
+        raise plugins.requests.ConnectionError("refused")
+
+    monkeypatch.setattr(plugins.requests, "post", mock_post)
+
+    token = plugins._webui_signin("http://localhost:3000", "admin@airpods", "admin")
+    assert token is None
+
+
+def test_webui_signin_returns_none_on_bad_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MockResponse:
+        status_code = 401
+
+        def raise_for_status(self) -> None:
+            raise plugins.requests.HTTPError(response=self)  # type: ignore[arg-type]
+
+        def json(self) -> dict:
+            return {"detail": "Unauthorized"}
+
+    monkeypatch.setattr(plugins.requests, "post", lambda *a, **kw: MockResponse())
+
+    token = plugins._webui_signin("http://localhost:3000", "user@x", "wrongpass")
+    assert token is None
+
+
+def test_reload_functions_via_api_calls_update_endpoint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = plugins.PluginModule(
+        id="filters.alpha",
+        path=tmp_path / "filters" / "alpha.py",
+        content="class Filter:\n    def inlet(self, body): return body\n",
+        function_type="filter",
+    )
+
+    calls: list[dict] = []
+
+    class MockResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def json(self) -> dict:
+            return {"id": "filters.alpha"}
+
+    def mock_post(
+        url: str,
+        json: dict | None = None,
+        headers: dict | None = None,
+        timeout: object = None,
+        **kwargs: object,
+    ) -> MockResponse:
+        calls.append({"url": url, "json": json, "headers": headers})
+        return MockResponse()
+
+    monkeypatch.setattr(plugins.requests, "post", mock_post)
+
+    reloaded = plugins.reload_functions_via_api(
+        "http://localhost:3000", "tok123", [module]
+    )
+
+    assert reloaded == 1
+    assert len(calls) == 1
+    assert (
+        calls[0]["url"]
+        == "http://localhost:3000/api/v1/functions/id/filters.alpha/update"
+    )
+    assert calls[0]["json"] == {"id": "filters.alpha", "content": module.content}
+    assert calls[0]["headers"] == {"Authorization": "Bearer tok123"}
+
+
+def test_reload_functions_via_api_skips_on_http_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    modules = [
+        plugins.PluginModule(
+            "a",
+            tmp_path / "a.py",
+            "class Filter:\n    def inlet(self, b): return b\n",
+            "filter",
+        ),
+        plugins.PluginModule(
+            "b",
+            tmp_path / "b.py",
+            "class Filter:\n    def inlet(self, b): return b\n",
+            "filter",
+        ),
+    ]
+
+    call_count = 0
+
+    class MockFailResponse:
+        status_code = 500
+
+        def raise_for_status(self) -> None:
+            raise plugins.requests.HTTPError()
+
+    class MockOkResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            pass
+
+    def mock_post(url: str, **kwargs: object) -> MockFailResponse | MockOkResponse:
+        nonlocal call_count
+        call_count += 1
+        return MockFailResponse() if call_count == 1 else MockOkResponse()
+
+    monkeypatch.setattr(plugins.requests, "post", mock_post)
+
+    reloaded = plugins.reload_functions_via_api("http://localhost:3000", "tok", modules)
+
+    assert reloaded == 1
+    assert call_count == 2
