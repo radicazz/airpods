@@ -14,8 +14,6 @@ from airpods.logging import console
 from airpods.runtime import (
     ContainerRuntimeError,
     get_runtime,
-    PodmanRuntime,
-    DockerRuntime,
 )
 from airpods.services import (
     ServiceManager,
@@ -36,7 +34,7 @@ def get_cli_config() -> CLIConfig:
 
 
 class _ManagerProxy:
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> object:
         if _MANAGER is None:  # pragma: no cover - defensive guard
             raise AttributeError("manager is not initialized yet")
         return getattr(_MANAGER, name)
@@ -60,12 +58,7 @@ def _apply_cli_config(config) -> None:
     DEFAULT_STARTUP_CHECK_INTERVAL = _CONFIG.cli.startup_check_interval
 
     # Compute runtime-specific dependencies and GPU flags
-    if isinstance(_RUNTIME, PodmanRuntime):
-        runtime_name = "podman"
-    elif isinstance(_RUNTIME, DockerRuntime):
-        runtime_name = "docker"
-    else:
-        runtime_name = "podman"  # fallback for "auto"
+    runtime_name = _RUNTIME.runtime_name
 
     # Resolve GPU device flag (runtime-aware)
     resolved_gpu_flag = gpu_utils.get_gpu_device_flag(
@@ -269,21 +262,15 @@ def format_transfer_label(
     return f"{size_label} @ {speed:.1f} MB/s ({elapsed_seconds:.1f}s)"
 
 
+OLLAMA_DEFAULT_PORT = 11434
+
+
 def get_ollama_port() -> int:
-    """
-    Get the Ollama service port from configuration.
-
-    Returns:
-        Ollama port number (default: 11434)
-    """
-    # Find Ollama service in registry
+    """Get the Ollama service port from configuration."""
     spec = config_module.REGISTRY.get("ollama")
-    if spec and spec.ports and len(spec.ports) > 0:
-        # ports is a list of tuples (host_port, container_port)
+    if spec and spec.ports:
         return spec.ports[0][0]
-
-    # Fallback to default
-    return 11434
+    return OLLAMA_DEFAULT_PORT
 
 
 def check_service_availability(service_name: str) -> tuple[bool, str]:
