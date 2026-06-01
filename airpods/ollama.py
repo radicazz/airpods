@@ -96,6 +96,7 @@ def pull_model(
     name: str,
     port: int = 11434,
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
+    stall_timeout: float = 120.0,
 ) -> bool:
     """
     Pull a model from the Ollama library.
@@ -105,19 +106,20 @@ def pull_model(
         port: Ollama API port (default: 11434)
         progress_callback: Optional callback function called with progress updates
                           Receives dict with keys: status, digest, total, completed
+        stall_timeout: Seconds to wait between received bytes before raising a stall error
 
     Returns:
         True if pull succeeded
 
     Raises:
-        OllamaAPIError: If API request fails
+        OllamaAPIError: If API request fails or download stalls
     """
     try:
         response = requests.post(
             f"{get_ollama_url(port)}/api/pull",
             json={"name": name},
             stream=True,
-            timeout=None,  # No timeout for long downloads
+            timeout=(10.0, stall_timeout),  # (connect_timeout, per-read stall_timeout)
         )
         response.raise_for_status()
 
@@ -136,6 +138,19 @@ def pull_model(
                     continue
 
         return True
+    except requests.exceptions.ConnectTimeout:
+        raise OllamaAPIError(
+            f"Timed out connecting to Ollama on port {port}. Is the service running?"
+        ) from None
+    except requests.exceptions.ReadTimeout:
+        raise OllamaAPIError(
+            f"Model pull stalled — no data received for {stall_timeout:.0f}s. "
+            "Check your network or run 'airpods logs ollama'."
+        ) from None
+    except requests.exceptions.ConnectionError as e:
+        raise OllamaAPIError(
+            f"Connection to Ollama lost while pulling '{name}': {e}"
+        ) from e
     except requests.RequestException as e:
         raise OllamaAPIError(f"Failed to pull model '{name}': {e}") from e
 

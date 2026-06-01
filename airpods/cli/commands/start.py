@@ -6,6 +6,14 @@ import queue
 import re
 import subprocess
 import time
+
+# Compiled once at import time — used inside the hot inner loop of
+# _pull_images_with_progress to avoid repeated pattern compilation.
+_LAYER_ID_RE = re.compile(r"^(?P<layer>[0-9a-f]{6,}):", re.IGNORECASE)
+_DOWNLOAD_SIZE_RE = re.compile(
+    r"(?P<cur>\d+(?:\.\d+)?)\s*(?P<cur_unit>[kKmMgGtTpP]?B)\s*/\s*"
+    r"(?P<total>\d+(?:\.\d+)?)\s*(?P<total_unit>[kKmMgGtTpP]?B)"
+)
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -871,9 +879,9 @@ def register(app: typer.Typer) -> CommandMap:
 
                         for model_name in to_pull:
                             try:
-                                console.print(f"  Pulling [accent]{model_name}[/]...")
-                                ollama_module.pull_model(model_name, port)
-                                console.print(f"  [ok]✓ {model_name} ready[/]")
+                                _pull_ollama_model_with_progress(
+                                    model_name, port, ollama_module
+                                )
                             except Exception as e:
                                 console.print(
                                     f"  [warn]Failed to pull {model_name}: {e}[/]"
@@ -895,6 +903,54 @@ def register(app: typer.Typer) -> CommandMap:
         )
 
     return {"start": start}
+
+
+def _pull_ollama_model_with_progress(model_name: str, port: int, ollama_module) -> None:
+    """Pull a single Ollama model, showing a live Rich progress bar."""
+    with Progress(
+        SpinnerColumn(style="accent"),
+        TextColumn(f"  [accent]{model_name}[/]", justify="right"),
+        TextColumn("{task.fields[status]}", style="muted", markup=True),
+        TextColumn("{task.fields[transfer]}", style="dim", justify="right"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task_id = progress.add_task(
+            "pull",
+            total=None,
+            status="connecting…",
+            transfer="",
+        )
+
+        def on_progress(data: dict) -> None:
+            status = (data.get("status") or "").strip()
+            completed = data.get("completed") or 0
+            total = data.get("total") or 0
+
+            if total > 0:
+                xfer = f"{_format_size(completed)}/{_format_size(total)}"
+            elif completed > 0:
+                xfer = _format_size(completed)
+            else:
+                xfer = ""
+
+            if len(status) > 50:
+                status = f"{status[:47]}…"
+
+            progress.update(task_id, status=status, transfer=xfer)
+
+        ollama_module.pull_model(model_name, port, progress_callback=on_progress)
+
+        progress.update(
+            task_id,
+            status="[ok]✓ Ready[/]",
+            transfer="",
+            total=1,
+            completed=1,
+        )
+
+    console.print(f"  [ok]✓ {model_name} ready[/]")
 
 
 def _format_size(size_bytes: int) -> str:
@@ -1046,15 +1102,11 @@ def _pull_images_with_progress(
         # Expected patterns (docker/podman):
         # <layer>: Downloading 12.3MB/45.6MB
         # <layer>: Downloading [==>] 12.3MB/45.6MB
-        match = re.match(r"^(?P<layer>[0-9a-f]{6,}):", line, re.IGNORECASE)
+        match = _LAYER_ID_RE.match(line)
         if not match:
             return None
         layer = match.group("layer")
-        size_match = re.search(
-            r"(?P<cur>\d+(?:\.\d+)?)\s*(?P<cur_unit>[kKmMgGtTpP]?B)\s*/\s*"
-            r"(?P<total>\d+(?:\.\d+)?)\s*(?P<total_unit>[kKmMgGtTpP]?B)",
-            line,
-        )
+        size_match = _DOWNLOAD_SIZE_RE.search(line)
         if not size_match:
             return None
         current = _parse_size_fragment(
