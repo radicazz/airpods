@@ -152,6 +152,8 @@ def _maybe_import_webui_plugins(
         return
 
     container_name = webui_specs[0].container
+    _webui_port = webui_specs[0].ports[0][0] if webui_specs[0].ports else 3000
+    _base_url = f"http://localhost:{_webui_port}"
     plugins_dir = plugins.get_plugins_target_dir()
 
     # The DB may not be ready immediately after container start; retry briefly.
@@ -181,10 +183,28 @@ def _maybe_import_webui_plugins(
                 admin_user_id=owner_id,
                 container_name=container_name,
             )
-            if imported > 0:
+            if imported:
                 console.print(
-                    f"[ok]✓ Auto-imported {imported} plugin(s) into Open WebUI[/]"
+                    f"[ok]✓ Auto-imported {len(imported)} plugin(s) into Open WebUI[/]"
                 )
+                token = plugins._webui_signin(
+                    _base_url,
+                    plugins.DEFAULT_ADMIN_EMAIL,
+                    plugins.DEFAULT_ADMIN_PASSWORD,
+                )
+                if token:
+                    reloaded = plugins.reload_functions_via_api(
+                        _base_url, token, imported
+                    )
+                    if verbose:
+                        console.print(
+                            f"[info]Reloaded {reloaded}/{len(imported)} plugin(s) into OWU memory[/]"
+                        )
+                elif verbose:
+                    console.print(
+                        "[info]Could not reload plugins into OWU memory "
+                        "(signin failed — functions active after OWU restart)[/]"
+                    )
             elif verbose:
                 console.print("[info]No new plugins to import (may already exist)[/]")
         except Exception as e:
