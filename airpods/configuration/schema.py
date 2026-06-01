@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# Covers https://, git://, git@host:, and ssh:// style git URLs.
+_GIT_URL_RE = re.compile(
+    r"^(https?://|git://|git@|ssh://git@|file://|[\w.+-]+@[\w.-]+:)"
+)
+
+
+def _is_valid_git_url(url: str) -> bool:
+    return bool(_GIT_URL_RE.match(url))
 
 
 class MetaConfig(BaseModel):
@@ -137,6 +147,10 @@ class CustomNodeInstall(BaseModel):
         if value is None:
             return None
         cleaned = value.strip()
+        if cleaned and not _is_valid_git_url(cleaned):
+            raise ValueError(
+                f"custom node repo must be a valid git URL (https://, git@, ssh://, etc.): {cleaned!r}"
+            )
         return cleaned or None
 
     @field_validator("path")

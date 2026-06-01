@@ -397,6 +397,7 @@ try:
     cur = conn.cursor()
     for table in ("user", "users"):
         try:
+            # table is from a hardcoded tuple — safe to interpolate
             cur.execute(f"SELECT COUNT(*) FROM {table}")
             count = cur.fetchone()[0]
             if count > 0:
@@ -453,6 +454,11 @@ try:
 
     if not table:
         raise RuntimeError("no user table found")
+
+    # Whitelist guard: table name comes from schema inspection above,
+    # but we double-check against the known set before using it in SQL.
+    if table not in ("user", "users"):
+        raise RuntimeError(f"unexpected user table name: {{table!r}}")
 
     # Check if admin already exists
     cur.execute(f"SELECT id FROM {{table}} WHERE email=?", (ADMIN_EMAIL,))

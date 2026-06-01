@@ -121,7 +121,7 @@ def load_config() -> AirpodsConfig:
             try:
                 host_port = ports[0].get("host")
                 container_port = ports[0].get("container")
-            except AttributeError:
+            except (AttributeError, IndexError, TypeError):
                 host_port = None
                 container_port = None
             port_arg = command_args.get("port")
