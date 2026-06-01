@@ -606,9 +606,13 @@ def _webui_signin(base_url: str, email: str, password: str) -> str | None:
             timeout=(WEBUI_API_CONNECT_TIMEOUT, WEBUI_API_READ_TIMEOUT),
         )
         response.raise_for_status()
-        token = response.json().get("token")
+        data = response.json()
+        token = data.get("token")
         return token if isinstance(token, str) and token else None
-    except Exception:
+    except requests.RequestException:
+        return None
+    except (ValueError, AttributeError, TypeError, KeyError):
+        # Unexpected response shape — OWU API may have changed
         return None
 
 
@@ -623,13 +627,15 @@ def reload_functions_via_api(
     function source and refresh its in-memory state — without this, functions
     written directly to SQLite only become active after an OWU restart.
 
-    Returns the number of functions successfully reloaded. Per-module failures
-    are silently swallowed; the DB write already succeeded.
+    Returns the number of functions successfully reloaded. Per-module HTTP
+    errors are skipped; a connection-level failure short-circuits the loop
+    since remaining calls would also fail.
     """
     reloaded = 0
+    clean_url = base_url.rstrip("/")
     headers = {"Authorization": f"Bearer {token}"}
     for module in modules:
-        url = f"{base_url.rstrip('/')}/api/v1/functions/id/{module.id}/update"
+        url = f"{clean_url}/api/v1/functions/id/{module.id}/update"
         try:
             response = requests.post(
                 url,
@@ -639,8 +645,10 @@ def reload_functions_via_api(
             )
             response.raise_for_status()
             reloaded += 1
-        except Exception:
-            pass
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            break  # OWU is unreachable; no point retrying remaining modules
+        except requests.RequestException:
+            pass  # Per-module HTTP error (404, 500, etc.); try remaining modules
     return reloaded
 
 

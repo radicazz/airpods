@@ -36,6 +36,7 @@ from airpods.cuda import select_cuda_version, get_cuda_info_display
 from airpods.services import ServiceSpec
 from airpods.configuration import get_config
 from airpods import gguf, state
+from airpods.ollama import format_size as _format_size
 
 from ..common import (
     COMMAND_CONTEXT,
@@ -152,8 +153,9 @@ def _maybe_import_webui_plugins(
         return
 
     container_name = webui_specs[0].container
-    _webui_port = webui_specs[0].ports[0][0] if webui_specs[0].ports else 3000
-    _base_url = f"http://localhost:{_webui_port}"
+    # ports is List[Tuple[host_port, container_port]]; first mapping is the HTTP port
+    webui_port = webui_specs[0].ports[0][0] if webui_specs[0].ports else 3000
+    base_url = f"http://localhost:{webui_port}"
     plugins_dir = plugins.get_plugins_target_dir()
 
     # The DB may not be ready immediately after container start; retry briefly.
@@ -188,13 +190,13 @@ def _maybe_import_webui_plugins(
                     f"[ok]✓ Auto-imported {len(imported)} plugin(s) into Open WebUI[/]"
                 )
                 token = plugins._webui_signin(
-                    _base_url,
+                    base_url,
                     plugins.DEFAULT_ADMIN_EMAIL,
                     plugins.DEFAULT_ADMIN_PASSWORD,
                 )
                 if token:
                     reloaded = plugins.reload_functions_via_api(
-                        _base_url, token, imported
+                        base_url, token, imported
                     )
                     if verbose:
                         console.print(
@@ -202,8 +204,8 @@ def _maybe_import_webui_plugins(
                         )
                 elif verbose:
                     console.print(
-                        "[info]Could not reload plugins into OWU memory "
-                        "(signin failed — functions active after OWU restart)[/]"
+                        "[info]Plugin hot-reload skipped — if you changed the admin "
+                        "password, restart OWU to activate new plugins[/]"
                     )
             elif verbose:
                 console.print("[info]No new plugins to import (may already exist)[/]")
@@ -955,8 +957,11 @@ def _pull_ollama_model_with_progress(model_name: str, port: int, ollama_module) 
             else:
                 xfer = ""
 
+            if not status and not xfer:
+                return  # Heartbeat with no useful content; keep current display
+
             if len(status) > 50:
-                status = f"{status[:47]}…"
+                status = f"{status[:49]}…"
 
             progress.update(task_id, status=status, transfer=xfer)
 
@@ -971,15 +976,6 @@ def _pull_ollama_model_with_progress(model_name: str, port: int, ollama_module) 
         )
 
     console.print(f"  [ok]✓ {model_name} ready[/]")
-
-
-def _format_size(size_bytes: int) -> str:
-    """Format bytes as human-readable size."""
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.1f} PB"
 
 
 def _parse_size_fragment(value: str, unit: str) -> int:

@@ -9,8 +9,17 @@ from typing import Dict, List, Literal, Optional, Tuple, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Covers https://, git://, git@host:, and ssh:// style git URLs.
+# Each alternative requires content after the scheme so bare prefixes like
+# "https://" (no hostname) are rejected at config-load time.
 _GIT_URL_RE = re.compile(
-    r"^(https?://|git://|git@|ssh://git@|file://|[\w.+-]+@[\w.-]+:)"
+    r"^(?:"
+    r"https?://\S+"  # https://host/...
+    r"|git://\S+"  # git://host/...
+    r"|git@[^:\s]+:.+"  # git@host:path  (SCP)
+    r"|ssh://git@\S+"  # ssh://git@host/...
+    r"|file://\S+"  # file:///path
+    r"|[\w.+-]+@[\w.-]+:.+"  # user@host:path (SCP generic)
+    r")"
 )
 
 
@@ -39,7 +48,7 @@ class CLIConfig(BaseModel):
     startup_timeout: int = Field(default=120, ge=10, le=600)
     startup_check_interval: float = Field(default=2.0, ge=0.5, le=10.0)
     max_concurrent_pulls: int = Field(default=3, ge=1, le=10)
-    plugin_owner: Literal["auto", "admin", "airpods"] = "airpods"
+    plugin_owner: Literal["auto", "admin", "airpods"] = "auto"
     auto_confirm: bool = False
     verbose: bool = False
     debug: bool = False
