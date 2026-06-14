@@ -298,8 +298,7 @@ def test_start_auto_confirm_from_config_skips_download_prompt(
 @patch("airpods.launch._maybe_import_webui_plugins")
 @patch("airpods.launch._maybe_prepare_custom_nodes")
 @patch("airpods.launch._maybe_sync_plugins")
-@patch("airpods.cli.commands.start.collect_host_ports")
-@patch("airpods.cli.commands.start.detect_gpu")
+@patch("airpods.system.detect_gpu")
 @patch("airpods.cli.commands.start.manager")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
@@ -312,7 +311,6 @@ def test_start_wait_retries_custom_node_requirements_after_readiness(
     mock_pull,
     mock_manager,
     mock_detect_gpu,
-    mock_collect_ports,
     mock_sync_plugins,
     mock_prepare_nodes,
     mock_import_plugins,
@@ -334,7 +332,6 @@ def test_start_wait_retries_custom_node_requirements_after_readiness(
     mock_detect_gpu.return_value = (False, "CPU")
     mock_sync_plugins.return_value = (0, 0)
     mock_prepare_nodes.return_value = ([], 0)
-    mock_collect_ports.return_value = [11434]
     mock_manager.ensure_volumes.return_value = []
     mock_manager.container_exists.return_value = False
     mock_manager.runtime.image_exists.return_value = False

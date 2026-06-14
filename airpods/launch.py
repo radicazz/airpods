@@ -345,6 +345,7 @@ def perform_start(
     force_cpu: bool,
     yes: bool,
     max_concurrent_pulls: int,
+    custom_nodes_list: list | None = None,
     manager: object | None = None,
 ) -> None:
     """Core orchestration for starting the requested (and needed) services.
@@ -370,42 +371,16 @@ def perform_start(
     from airpods.ollama import format_size as _format_size  # not directly needed here
     from airpods.cli.common import get_ollama_port
     from airpods.cli import pull as _pull_cli
+    from airpods.cli.status_view import check_service_health, collect_host_ports
 
-    # Show GPU status (verbose only)
-    if verbose:
-        gpu_available, gpu_detail = detect_gpu()
-        if gpu_available:
-            console.print(f"GPU: [ok]enabled[/] ({gpu_detail})")
-        else:
-            console.print(f"GPU: [muted]not detected[/] ({gpu_detail})")
-        if gpu_available and getattr(mgr, "gpu_device_flag", None) is None:
-            console.print(
-                "[warn]GPU passthrough not configured for the current runtime. "
-                "Set up NVIDIA CDI or force CPU.[/]"
-            )
+    # GPU/CUDA display, volumes, llama preflight, and image pull/confirm are
+    # handled by the thin command (for correct UX ordering and to keep the
+    # existing test patches on start.* and pull.* working as written).
+    # We only compute gpu_available here for _effective_spec / launch messages.
+    gpu_available, _ = detect_gpu()
 
-        # Show CUDA detection info if ComfyUI is being started
-        comfyui_specs = [s for s in specs_to_start if s.name == "comfyui"]
-        if comfyui_specs:
-            has_gpu_cap, gpu_name_cap, compute_cap = detect_cuda_compute_capability()
-            if has_gpu_cap and compute_cap:
-                selected_cuda = select_cuda_version(compute_cap)
-                cuda_info = get_cuda_info_display(
-                    has_gpu_cap, gpu_name_cap, compute_cap, selected_cuda
-                )
-                console.print(f"CUDA: [ok]{cuda_info}[/]")
-            else:
-                cuda_info = get_cuda_info_display(
-                    has_gpu_cap, gpu_name_cap, compute_cap, "cu126"
-                )
-                console.print(f"CUDA: [muted]{cuda_info}[/]")
-    else:
-        gpu_available, gpu_detail = detect_gpu()
-
-    # NOTE: volumes ensure is performed by the caller (command) before delegation
-    # so that the "Ensuring volumes" status message stays in the start UX.
-
-    # Simple log-based startup process
+    # Simple log-based startup process. The caller has already decided which
+    # images (if any) needed pulling and has invoked the pull UI if necessary.
     service_urls: dict[str, str] = {}
     failed_services: list[str] = []
     timeout_services: list[str] = []
@@ -428,36 +403,6 @@ def perform_start(
                 force_cpu=True,
             )
         return spec
-
-    # The llama model presence guard + prompt was executed by the caller
-    # (before image download decision) so that the prompt appears at the
-    # natural point in the start UX.  Here we only deal with the images that
-    # the caller decided need pulling.
-
-    # (In a fuller extraction the llama guard could move here too; for the
-    # initial split we keep the prompt timing identical by leaving it in the
-    # thin command.)
-
-    specs_for_download: list[ServiceSpec] = []
-    for spec in (_effective_spec(spec) for spec in specs_to_start):
-        exists = mgr.runtime.image_exists(spec.image)
-        if exists is True:
-            continue
-        specs_for_download.append(spec)
-
-    if specs_for_download:
-        # Check for images that need to be downloaded and confirm with user
-        if not yes:
-            if not _pull_cli._confirm_image_downloads(specs_for_download):
-                console.print("[warn]Download cancelled by user[/]")
-                raise __import__("typer").Exit(code=0)
-
-        # Pull images with live progress so long pulls don't feel like a hang.
-        _pull_cli._pull_images_with_progress(
-            specs_for_download, max_concurrent=max_concurrent_pulls, verbose=verbose
-        )
-    elif verbose:
-        console.print("[info]Images already present; skipping pulls[/]")
 
     # Start services with simple logging
     for spec in specs_to_start:
@@ -497,13 +442,13 @@ def perform_start(
     # If we're not waiting for readiness, return after pods are launched.
     if not wait:
         # Even without --wait, attempt to auto-import Open WebUI plugins once DB exists.
-        _launch._maybe_import_webui_plugins(
-            specs, cli_config=cli_config, verbose=verbose
+        _maybe_import_webui_plugins(
+            specs_to_start, cli_config=cli_config, verbose=verbose
         )
-        _launch._maybe_install_custom_node_requirements(
-            specs,
-            nodes=[],
-            verbose=verbose,  # caller already prepared the list if needed
+        _maybe_install_custom_node_requirements(
+            specs_to_start,
+            nodes=custom_nodes_list or [],
+            verbose=verbose,
         )
 
         started = [
@@ -585,9 +530,7 @@ def perform_start(
                     continue
 
                 port_bindings = mgr.service_ports(spec)
-                host_ports = __import__(
-                    "airpods.cli.status_view", fromlist=["collect_host_ports"]
-                ).collect_host_ports(spec, port_bindings)
+                host_ports = collect_host_ports(spec, port_bindings)
                 host_port = host_ports[0] if host_ports else None
 
                 if not spec.health_path or host_port is None:
@@ -598,9 +541,7 @@ def perform_start(
                         service_urls[spec.name] = ""
                     continue
 
-                if __import__(
-                    "airpods.cli.status_view", fromlist=["check_service_health"]
-                ).check_service_health(
+                if check_service_health(
                     spec, host_port, timeout=cli_config.ping_timeout
                 ):
                     service_urls[spec.name] = f"http://localhost:{host_port}"
@@ -696,10 +637,12 @@ def perform_start(
 
     # Auto-import plugins into Open WebUI if service is healthy
     if "open-webui" in service_urls and "open-webui" not in failed_services:
-        _launch._maybe_import_webui_plugins(
-            specs, cli_config=cli_config, verbose=verbose
+        _maybe_import_webui_plugins(
+            specs_to_start, cli_config=cli_config, verbose=verbose
         )
 
     # Re-attempt after readiness checks so requirements are installed when
     # ComfyUI startup is slower than container launch.
-    _launch._maybe_install_custom_node_requirements(specs, nodes=[], verbose=verbose)
+    _maybe_install_custom_node_requirements(
+        specs_to_start, nodes=custom_nodes_list or [], verbose=verbose
+    )

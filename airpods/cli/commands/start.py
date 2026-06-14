@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import time
-
-from dataclasses import replace
-from pathlib import Path
 from typing import Optional
 
 import typer
@@ -33,7 +29,6 @@ from ..common import (
 )
 from ..completions import service_name_completion
 from ..help import command_help_option, maybe_show_command_help
-from ..status_view import check_service_health, collect_host_ports
 from ..type_defs import CommandMap
 
 from .. import pull as _pull
@@ -356,250 +351,26 @@ def register(app: typer.Typer) -> CommandMap:
         elif verbose:
             console.print("[info]Images already present; skipping pulls[/]")
 
-        # Start services with simple logging
-        for spec in specs_to_start:
-            if verbose:
-                console.print(f"Starting [accent]{spec.name}[/]...")
-
-            try:
-                with status_spinner(f"Launching {spec.name}"):
-                    effective_spec = _effective_spec(spec)
-                    if effective_spec is not spec:
-                        if force_cpu:
-                            message = "llamacpp: forcing CPU image."
-                        elif not gpu_available:
-                            message = (
-                                "llamacpp GPU requested but no GPU detected; "
-                                "falling back to CPU image."
-                            )
-                        else:
-                            message = (
-                                "llamacpp GPU passthrough not configured; "
-                                "falling back to CPU image."
-                            )
-                        console.print(f"[warn]{message}[/]")
-
-                    manager.start_service(
-                        effective_spec,
-                        gpu_available=gpu_available,
-                        force_cpu_override=force_cpu,
-                    )
-                if verbose:
-                    console.print(f"[ok]✓ {spec.name} launched[/]")
-            except Exception as e:
-                console.print(f"[error]✗ Failed to start {spec.name}: {e}[/]")
-                failed_services.append(spec.name)
-                continue
-
-        # If we're not waiting for readiness, return after pods are launched.
-        if not wait:
-            # Even without --wait, attempt to auto-import Open WebUI plugins once DB exists.
-            _launch._maybe_import_webui_plugins(
-                specs, cli_config=cli_config, verbose=verbose
-            )
-            _launch._maybe_install_custom_node_requirements(
-                specs, nodes=custom_nodes_list, verbose=verbose
-            )
-
-            started = [
-                spec.name for spec in specs_to_start if spec.name not in failed_services
-            ]
-            if started:
-                console.print(
-                    f"[ok]✓ Launched {len(started)} service{'s' if len(started) != 1 else ''}: {', '.join(started)}[/]"
-                )
-            if failed_services:
-                console.print(
-                    f"[error]✗ Failed services: {', '.join(failed_services)}. "
-                    "Check logs with 'airpods logs'[/]"
-                )
-                raise typer.Exit(code=1)
-            console.print(
-                "[dim]Tip: Use 'airpods status' to check readiness and URLs, or 'airpods logs <service>' to watch startup.[/dim]"
-            )
-
-            try:
-                from airpods.updates import (
-                    check_for_update,
-                    detect_install_source,
-                    format_upgrade_hint,
-                    is_update_available,
-                )
-
-                latest = check_for_update(timeout_seconds=0.8)
-                if latest and is_update_available(latest):
-                    hint = format_upgrade_hint(latest, detect_install_source())
-                    console.print(
-                        f"[warn]Update available:[/] {latest.tag} (installed: v{__version__})"
-                    )
-                    console.print(f"[dim]{hint}[/dim]")
-            except Exception:
-                pass
-            return
-
-        # Wait for health checks with timeout
-        start_time = time.time()
-        timeout_seconds = cli_config.startup_timeout
-        check_interval = cli_config.startup_check_interval
-
-        with status_spinner(
-            f"Waiting for services to become ready (up to {timeout_seconds}s)"
-        ) as status:
-            while True:
-                elapsed = time.time() - start_time
-                if elapsed >= timeout_seconds:
-                    break
-
-                pod_rows = manager.pod_status_rows() or {}
-                all_done = True
-                pending: list[str] = []
-
-                for spec in specs_to_start:
-                    if spec.name in failed_services:
-                        continue
-
-                    if spec.name in service_urls:
-                        continue  # Already healthy / ready
-
-                    row = pod_rows.get(spec.pod)
-                    if not row:
-                        all_done = False
-                        pending.append(spec.name)
-                        continue
-
-                    pod_status = (row.get("Status") or "").strip()
-
-                    if pod_status in {"Exited", "Error"}:
-                        if spec.name not in failed_services:
-                            failed_services.append(spec.name)
-                        continue
-
-                    if pod_status != "Running":
-                        all_done = False
-                        pending.append(spec.name)
-                        continue
-
-                    port_bindings = manager.service_ports(spec)
-                    host_ports = collect_host_ports(spec, port_bindings)
-                    host_port = host_ports[0] if host_ports else None
-
-                    if not spec.health_path or host_port is None:
-                        # No health check needed; pod running is "ready".
-                        if host_port:
-                            service_urls[spec.name] = f"http://localhost:{host_port}"
-                        else:
-                            service_urls[spec.name] = ""
-                        continue
-
-                    if check_service_health(spec, host_port):
-                        service_urls[spec.name] = f"http://localhost:{host_port}"
-                    else:
-                        all_done = False
-                        pending.append(spec.name)
-
-                if all_done:
-                    break
-
-                remaining = max(0, int(timeout_seconds - elapsed))
-                if pending:
-                    pending_label = ", ".join(pending)
-                    status.update(
-                        f"[info]Waiting ({remaining}s left): {pending_label}[/]"
-                    )
-                else:
-                    status.update(f"[info]Waiting ({remaining}s left)[/]")
-
-                time.sleep(check_interval)
-
-        # Handle timeouts
-        for spec in specs_to_start:
-            if spec.name not in failed_services and spec.name not in service_urls:
-                timeout_services.append(spec.name)
-
-        # Categorize results
-        healthy_services = [
-            name for name in service_urls.keys() if name not in failed_services
-        ]
-        failed = failed_services
-
-        # Show clean completion summary
-        if healthy_services:
-            urls = [
-                service_urls.get(name)
-                for name in healthy_services
-                if service_urls.get(name)
-            ]
-            url_display = f" • {', '.join(urls)}" if urls else ""
-            console.print(
-                f"[ok]✓ Started {len(healthy_services)} service{'s' if len(healthy_services) != 1 else ''}{url_display}[/]"
-            )
-
-        if failed:
-            console.print(
-                f"[error]✗ Failed services: {', '.join(failed)}. "
-                "Check logs with 'airpods logs'[/]"
-            )
-            raise typer.Exit(code=1)
-
-        if timeout_services:
-            console.print(
-                f"[warn]⏱ Timed out services: {', '.join(timeout_services)}. "
-                "Services may still be starting. Check with 'airpods status'[/]"
-            )
-
-        # Auto-pull Ollama models if configured and service is healthy
-        ollama_specs = [s for s in specs_to_start if s.name == "ollama"]
-        if (
-            ollama_specs
-            and "ollama" in service_urls
-            and "ollama" not in failed_services
-        ):
-            from airpods import ollama as ollama_module
-            from airpods.cli.common import get_ollama_port
-
-            config = get_config()
-            auto_pull = config.services.get("ollama", None)
-            auto_pull_models = auto_pull.auto_pull_models if auto_pull else []
-
-            if auto_pull_models:
-                port = get_ollama_port()
-
-                # Get list of installed models
-                try:
-                    installed = ollama_module.list_models(port)
-                    installed_names = {m.get("name") for m in installed}
-
-                    # Filter out models that are already installed
-                    to_pull = [m for m in auto_pull_models if m not in installed_names]
-
-                    if to_pull:
-                        console.print(
-                            f"[info]Auto-pulling {len(to_pull)} model(s)...[/]"
-                        )
-
-                        for model_name in to_pull:
-                            try:
-                                _pull._pull_ollama_model_with_progress(
-                                    model_name, port, ollama_module
-                                )
-                            except Exception as e:
-                                console.print(
-                                    f"  [warn]Failed to pull {model_name}: {e}[/]"
-                                )
-                    elif verbose:
-                        console.print("[info]All auto-pull models already installed[/]")
-
-                except Exception as e:
-                    console.print(f"[warn]Auto-pull failed: {e}[/]")
-
-        # Auto-import plugins into Open WebUI if service is healthy
-        if "open-webui" in service_urls and "open-webui" not in failed_services:
-            _maybe_import_webui_plugins(specs, cli_config=cli_config, verbose=verbose)
-
-        # Re-attempt after readiness checks so requirements are installed when
-        # ComfyUI startup is slower than container launch.
-        _launch._maybe_install_custom_node_requirements(
-            specs, nodes=custom_nodes_list, verbose=verbose
+        # Delegate the heavy remaining work (launch loop + effective spec + CPU
+        # fallback, --wait health polling + summaries, auto-Ollama, final hooks,
+        # update hint) to the extracted perform_start. This (together with the
+        # earlier extractions) completes the split.
+        _launch.perform_start(
+            specs_to_start,
+            cli_config=cli_config,
+            verbose=verbose,
+            wait=wait,
+            force_cpu=force_cpu,
+            yes=yes,
+            max_concurrent_pulls=max_concurrent_pulls,
+            custom_nodes_list=custom_nodes_list,
+            manager=manager,
         )
+
+        # The old duplicated launch/wait/ollama-auto/final-hooks code has been
+        # completely removed. All of it now lives (and is the single source of
+        # truth) in launch.perform_start (called above). The thin start command
+        # only owns the Typer surface, first-run config, pre-flight (llama/gguf,
+        # volumes, pull decision), early returns, and top-level UX.
 
     return {"start": start}
