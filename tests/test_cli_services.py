@@ -67,7 +67,7 @@ def test_start_respects_configured_concurrency(
     mock_manager.container_exists.return_value = False
     mock_confirm.return_value = True
 
-    result = runner.invoke(app, ["start"])
+    result = runner.invoke(app, ["start", "--yes"])
 
     assert result.exit_code == 0
     mock_pull.assert_called_once_with(
@@ -106,7 +106,7 @@ def test_start_sequential_flag_forces_single_pull(
     mock_manager.container_exists.return_value = False
     mock_confirm.return_value = True
 
-    result = runner.invoke(app, ["-V", "start", "--sequential"])
+    result = runner.invoke(app, ["-V", "start", "--sequential", "--yes"])
 
     assert result.exit_code == 0
     mock_pull.assert_called_once_with(
@@ -175,7 +175,7 @@ def test_start_non_verbose_uses_pull_ui(
     mock_manager.container_exists.return_value = False
     mock_confirm.return_value = True
 
-    result = runner.invoke(app, ["start"])
+    result = runner.invoke(app, ["start", "--yes"])
 
     assert result.exit_code == 0
     mock_pull_only.assert_called_once_with([spec], max_concurrent=5, verbose=False)

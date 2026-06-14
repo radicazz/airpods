@@ -14,6 +14,7 @@ from airpods.cuda import select_cuda_version, get_cuda_info_display
 from airpods.services import ServiceSpec
 from airpods.configuration import get_config
 from airpods import gguf, state
+from dataclasses import replace
 
 from ..common import (
     COMMAND_CONTEXT,
@@ -70,7 +71,7 @@ def register(app: typer.Typer) -> CommandMap:
             False,
             "--yes",
             "-y",
-            help="Skip confirmation prompts (auto-confirm downloads).",
+            help="Skip confirmation prompts (auto-confirm service start and downloads).",
         ),
     ) -> None:
         """Start pods for specified services."""
@@ -254,7 +255,7 @@ def register(app: typer.Typer) -> CommandMap:
 
         for spec in specs_to_start:
             if spec.name == "comfyui":
-                _ensure_comfyui_user_dirs(spec)
+                _launch._ensure_comfyui_user_dirs(spec)
 
         # Plugins were already synced above for all requested services.
 
@@ -336,6 +337,30 @@ def register(app: typer.Typer) -> CommandMap:
                             f"[info]  airpods models gguf pull <url> --name {rel}[/]"
                         )
                         raise typer.Exit(code=1)
+
+        # Final user confirmation before any image pulls or pod/container
+        # launch. This is deliberately placed after *all* checks and
+        # validations:
+        #   - runtime/dependency checks
+        #   - already-running pod+container detection
+        #   - plugin/custom-node sync + prepare (best-effort)
+        #   - volume ensure + status reporting
+        #   - comfyui user dir pre-creation
+        #   - GPU/CUDA detection + display
+        #   - llama.cpp GGUF model presence validation (incl. its own prompt)
+        # The prompt is skipped with --yes (or cli.auto_confirm).
+        # We still allow the (more detailed) image-download confirmation to
+        # follow when pulls are required; cancelling the start confirm here
+        # avoids unnecessary work and secondary prompts.
+        if not yes and specs_to_start:
+            console.print()
+            console.print("[bold]Services to start:[/]")
+            for spec in specs_to_start:
+                console.print(f"  [accent]{spec.name}[/]")
+            console.print()
+            if not ui.confirm_action("Proceed to start?", default=True):
+                console.print("[warn]Start cancelled by user[/]")
+                raise typer.Exit(code=0)
 
         if specs_for_download:
             # Check for images that need to be downloaded and confirm with user
