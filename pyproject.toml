@@ -1,6 +1,6 @@
 [project]
 name = "airpods"
-version = "0.24.9"
+version = "0.24.10"
 description = "Friendly CLI for running AI models locally."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"

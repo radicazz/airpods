@@ -600,7 +600,9 @@ def perform_start(
 
                 if __import__(
                     "airpods.cli.status_view", fromlist=["check_service_health"]
-                ).check_service_health(spec, host_port):
+                ).check_service_health(
+                    spec, host_port, timeout=cli_config.ping_timeout
+                ):
                     service_urls[spec.name] = f"http://localhost:{host_port}"
                 else:
                     all_done = False

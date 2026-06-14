@@ -266,23 +266,25 @@ def format_port_bindings(port_bindings: dict[str, Any]) -> str:
     return ", ".join(ports) if ports else "-"
 
 
-def ping_service(spec: ServiceSpec, port: Optional[int]) -> str:
+def ping_service(
+    spec: ServiceSpec, port: Optional[int], *, timeout: float | None = None
+) -> str:
     """Ping a service's health endpoint and return status.
 
     Args:
         spec: Service specification containing health_path
         port: Host port to connect to
+        timeout: Optional override for the ping timeout (falls back to CLI config / default)
 
     Returns:
         Formatted status string with HTTP code and latency, or error type
     """
     if not spec.health_path or port is None:
         return "-"
+    ping_timeout = timeout if timeout is not None else DEFAULT_PING_TIMEOUT
     try:
         start = time.perf_counter()
-        conn = http.client.HTTPConnection(
-            "127.0.0.1", port, timeout=DEFAULT_PING_TIMEOUT
-        )
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=ping_timeout)
         conn.request("GET", spec.health_path)
         resp = conn.getresponse()
         code = resp.status
@@ -306,22 +308,24 @@ def ping_service(spec: ServiceSpec, port: Optional[int]) -> str:
         return f"[error]{type(exc).__name__}"
 
 
-def check_service_health(spec: ServiceSpec, port: Optional[int]) -> bool:
+def check_service_health(
+    spec: ServiceSpec, port: Optional[int], *, timeout: float | None = None
+) -> bool:
     """Check if a service is healthy (returns True/False).
 
     Args:
         spec: Service specification containing health_path
         port: Host port to connect to
+        timeout: Optional override for the ping timeout (falls back to CLI config / default)
 
     Returns:
         True if service is healthy (2xx-3xx response), False otherwise
     """
     if not spec.health_path or port is None:
         return False
+    ping_timeout = timeout if timeout is not None else DEFAULT_PING_TIMEOUT
     try:
-        conn = http.client.HTTPConnection(
-            "127.0.0.1", port, timeout=DEFAULT_PING_TIMEOUT
-        )
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=ping_timeout)
         conn.request("GET", spec.health_path)
         resp = conn.getresponse()
         code = resp.status
