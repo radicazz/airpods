@@ -22,7 +22,12 @@ from rich.text import Text
 from airpods import __description__, ui
 from airpods.logging import PALETTE, console
 
-from .common import COMMAND_ALIASES, HELP_OPTION_NAMES, check_service_availability
+from .common import (
+    COMMAND_ALIASES,
+    HELP_OPTION_NAMES,
+    SUBCOMMAND_ALIASES,
+    check_service_availability,
+)
 
 # Map commands to their required services
 COMMAND_DEPENDENCIES = {
@@ -81,6 +86,7 @@ def show_command_help(ctx: typer.Context) -> None:
 
 
 def _alias_groups() -> dict[str, list[str]]:
+    """Build alias groups for top-level commands only (used by root help)."""
     groups: dict[str, list[str]] = {}
     for alias, canonical in COMMAND_ALIASES.items():
         groups.setdefault(canonical, []).append(alias)
@@ -90,6 +96,26 @@ def _alias_groups() -> dict[str, list[str]]:
 
 
 COMMAND_ALIAS_GROUPS = _alias_groups()
+
+
+def _sub_alias_groups() -> dict[str, dict[str, list[str]]]:
+    """Build per-group alias lookup for subcommand groups.
+
+    Returns e.g. {"models": {"list": ["ls"], "remove": ["rm"]}, "gguf": {"list": ["ls"]}, ...}
+    Keys are the local group name (ctx.command.name for the group).
+    """
+    groups: dict[str, dict[str, list[str]]] = {}
+    for group_name, aliases_map in SUBCOMMAND_ALIASES.items():
+        g: dict[str, list[str]] = {}
+        for alias, canonical in aliases_map.items():
+            g.setdefault(canonical, []).append(alias)
+        for alist in g.values():
+            alist.sort()
+        groups[group_name] = g
+    return groups
+
+
+SUBCOMMAND_ALIAS_GROUPS = _sub_alias_groups()
 
 
 def show_root_help(ctx: typer.Context) -> None:
@@ -223,12 +249,20 @@ def command_help_rows(ctx: typer.Context):
     command_group = ctx.command
     if command_group is None or not isinstance(command_group, click.MultiCommand):
         return []
+    # Choose alias lookup: root-level uses COMMAND_ALIAS_GROUPS; sub-groups (models etc)
+    # use the per-group SUBCOMMAND_ALIAS_GROUPS keyed by the group's local .name
+    group_name = getattr(command_group, "name", None)
+    sub_groups = SUBCOMMAND_ALIAS_GROUPS.get(group_name or "", {})
     rows = []
     for name in command_group.list_commands(ctx):
         command = command_group.get_command(ctx, name)
         if not command or command.hidden:
             continue
-        alias_text = ", ".join(COMMAND_ALIAS_GROUPS.get(name, []))
+        if group_name in SUBCOMMAND_ALIAS_GROUPS:
+            alias_list = sub_groups.get(name, [])
+        else:
+            alias_list = COMMAND_ALIAS_GROUPS.get(name, [])
+        alias_text = ", ".join(alias_list)
         description = _command_description(command)
         option_hint = command_param_hint(command)
         rows.append((name, alias_text, option_hint, description))

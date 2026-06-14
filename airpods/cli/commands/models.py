@@ -11,7 +11,7 @@ import typer
 from airpods import gguf, ollama, ui
 from airpods.logging import console
 
-from ..common import COMMAND_CONTEXT, get_ollama_port
+from ..common import ALIAS_HELP_TEMPLATE, COMMAND_CONTEXT, get_ollama_port
 from ..completions import model_name_completion
 from ..help import command_help_option, maybe_show_command_help, show_command_help
 from ..type_defs import CommandMap
@@ -114,16 +114,6 @@ def list_gguf_cmd(
         table.add_row(model.name, size, modified)
 
     console.print(table)
-
-
-@gguf_app.command(name="ls", context_settings=COMMAND_CONTEXT)
-def list_gguf_alias(
-    ctx: typer.Context,
-    help_: bool = command_help_option(),
-) -> None:
-    """Alias for gguf list."""
-
-    list_gguf_cmd(ctx, help_)
 
 
 @gguf_app.command(name="pull", context_settings=COMMAND_CONTEXT)
@@ -231,16 +221,6 @@ def list_models_cmd(
     except ollama.OllamaAPIError as e:
         console.print(f"[error]Failed to list models: {e}[/]")
         raise typer.Exit(1)
-
-
-@models_app.command(name="ls", context_settings=COMMAND_CONTEXT)
-def list_models_alias(
-    ctx: typer.Context,
-    help_: bool = command_help_option(),
-) -> None:
-    """Alias for models list."""
-
-    list_models_cmd(ctx, help_)
 
 
 def _detect_model_source(model_spec: str) -> str:
@@ -528,20 +508,6 @@ def remove_model_cmd(
         raise typer.Exit(1)
 
 
-@models_app.command(name="rm", context_settings=COMMAND_CONTEXT)
-def remove_model_alias(
-    ctx: typer.Context,
-    help_: bool = command_help_option(),
-    model: str = typer.Argument(
-        ..., help="Model name to remove", shell_complete=model_name_completion
-    ),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
-) -> None:
-    """Alias for models remove."""
-
-    remove_model_cmd(ctx, help_, model, force)
-
-
 @models_app.command(name="info", context_settings=COMMAND_CONTEXT)
 def info_model_cmd(
     ctx: typer.Context,
@@ -690,6 +656,29 @@ def register(app: typer.Typer) -> CommandMap:
     app.add_typer(models_app, name="models")
     app.add_typer(models_app, name="model", hidden=True)
 
-    # Return empty dict since this is a typer sub-app
-    # Aliases will be handled in common.py
+    # Register hidden aliases for subcommands inside the models group (and gguf).
+    # This prevents them from appearing as separate rows in `models --help` while
+    # letting the help renderer show them (e.g. "list  ls") via COMMAND_ALIAS_GROUPS,
+    # and still allows invocation (e.g. `airpods models ls`).
+    models_app.command(
+        name="ls",
+        help=ALIAS_HELP_TEMPLATE.format(canonical="list"),
+        hidden=True,
+        context_settings=COMMAND_CONTEXT,
+    )(list_models_cmd)
+
+    models_app.command(
+        name="rm",
+        help=ALIAS_HELP_TEMPLATE.format(canonical="remove"),
+        hidden=True,
+        context_settings=COMMAND_CONTEXT,
+    )(remove_model_cmd)
+
+    gguf_app.command(
+        name="ls",
+        help=ALIAS_HELP_TEMPLATE.format(canonical="list"),
+        hidden=True,
+        context_settings=COMMAND_CONTEXT,
+    )(list_gguf_cmd)
+
     return {}

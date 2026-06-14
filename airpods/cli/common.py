@@ -97,6 +97,16 @@ COMMAND_ALIASES = {
     "health": "doctor",
 }
 
+# SUBCOMMAND_ALIASES map group local name -> (alias -> canonical) for subcommands
+# inside groups like "models", "workflows", and "gguf" (models gguf).
+# Used both for registering hidden aliases on the sub apps and for alias column
+# display in their help tables.
+SUBCOMMAND_ALIASES: dict[str, dict[str, str]] = {
+    "models": {"ls": "list", "rm": "remove"},
+    "gguf": {"ls": "list"},
+    "workflows": {"ls": "list", "delete": "remove"},
+}
+
 SERVICE_NAME_ALIASES = {
     "comfy": "comfyui",
     "comfyui": "comfyui",

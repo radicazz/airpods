@@ -31,7 +31,7 @@ from airpods import config as config_module
 from airpods import paths
 from airpods.logging import console
 
-from ..common import COMMAND_CONTEXT
+from ..common import ALIAS_HELP_TEMPLATE, COMMAND_CONTEXT
 from ..help import command_help_option, maybe_show_command_help, show_command_help
 from ..type_defs import CommandMap
 
@@ -844,17 +844,6 @@ def list_cmd(
         )
 
 
-@workflows_app.command(name="ls", context_settings=COMMAND_CONTEXT)
-def list_workflows_alias(
-    ctx: typer.Context,
-    help_: bool = command_help_option(),
-    limit: int = typer.Option(50, "--limit", help="Maximum workflows to show."),
-) -> None:
-    """Alias for workflows list."""
-
-    list_cmd(ctx, help_, limit)
-
-
 @workflows_app.command(name="api", context_settings=COMMAND_CONTEXT)
 def api_cmd(
     ctx: typer.Context,
@@ -1632,4 +1621,22 @@ def pull_cmd(
 
 def register(app: typer.Typer) -> CommandMap:
     app.add_typer(workflows_app, name="workflows")
-    return {"workflows delete": remove_cmd}
+
+    # Register hidden aliases for subcommands (e.g. ls for list, delete for remove).
+    # Keeps help tables clean (alias appears inline in purple next to canonical)
+    # and ensures `airpods workflows delete` and `ls` work as documented.
+    workflows_app.command(
+        name="ls",
+        help=ALIAS_HELP_TEMPLATE.format(canonical="list"),
+        hidden=True,
+        context_settings=COMMAND_CONTEXT,
+    )(list_cmd)
+
+    workflows_app.command(
+        name="delete",
+        help=ALIAS_HELP_TEMPLATE.format(canonical="remove"),
+        hidden=True,
+        context_settings=COMMAND_CONTEXT,
+    )(remove_cmd)
+
+    return {}
