@@ -294,10 +294,10 @@ def test_start_auto_confirm_from_config_skips_download_prompt(
     mock_pull.assert_called_once_with([spec], max_concurrent=3, verbose=False)
 
 
-@patch("airpods.cli.commands.start._maybe_install_custom_node_requirements")
-@patch("airpods.cli.commands.start._maybe_import_webui_plugins")
-@patch("airpods.cli.commands.start._maybe_prepare_custom_nodes")
-@patch("airpods.cli.commands.start._maybe_sync_plugins")
+@patch("airpods.launch._maybe_install_custom_node_requirements")
+@patch("airpods.launch._maybe_import_webui_plugins")
+@patch("airpods.launch._maybe_prepare_custom_nodes")
+@patch("airpods.launch._maybe_sync_plugins")
 @patch("airpods.cli.commands.start.collect_host_ports")
 @patch("airpods.cli.commands.start.detect_gpu")
 @patch("airpods.cli.commands.start.manager")
