@@ -37,12 +37,19 @@ def _make_mock_spec() -> ServiceSpec:
 
 
 @patch("airpods.cli.commands.start.manager")
-@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.pull._confirm_image_downloads")
+@patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
 @patch("airpods.cli.commands.start.ensure_podman_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_respects_configured_concurrency(
-    mock_resolve, mock_ensure, mock_get_cli_config, mock_pull, mock_manager, runner
+    mock_resolve,
+    mock_ensure,
+    mock_get_cli_config,
+    mock_pull,
+    mock_confirm,
+    mock_manager,
+    runner,
 ):
     mock_resolve.return_value = [_make_mock_spec()]
     mock_get_cli_config.return_value = type(
@@ -58,6 +65,7 @@ def test_start_respects_configured_concurrency(
     mock_manager.ensure_volumes.return_value = []
     mock_manager.pod_status_rows.return_value = {}
     mock_manager.container_exists.return_value = False
+    mock_confirm.return_value = True
 
     result = runner.invoke(app, ["start"])
 
@@ -68,12 +76,19 @@ def test_start_respects_configured_concurrency(
 
 
 @patch("airpods.cli.commands.start.manager")
-@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.pull._confirm_image_downloads")
+@patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
 @patch("airpods.cli.commands.start.ensure_podman_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_sequential_flag_forces_single_pull(
-    mock_resolve, mock_ensure, mock_get_cli_config, mock_pull, mock_manager, runner
+    mock_resolve,
+    mock_ensure,
+    mock_get_cli_config,
+    mock_pull,
+    mock_confirm,
+    mock_manager,
+    runner,
 ):
     mock_resolve.return_value = [_make_mock_spec()]
     mock_get_cli_config.return_value = type(
@@ -89,6 +104,7 @@ def test_start_sequential_flag_forces_single_pull(
     mock_manager.ensure_volumes.return_value = []
     mock_manager.pod_status_rows.return_value = {}
     mock_manager.container_exists.return_value = False
+    mock_confirm.return_value = True
 
     result = runner.invoke(app, ["-V", "start", "--sequential"])
 
@@ -99,17 +115,25 @@ def test_start_sequential_flag_forces_single_pull(
 
 
 @patch("airpods.cli.commands.start.manager")
-@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.pull._confirm_image_downloads")
+@patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
 @patch("airpods.cli.commands.start.ensure_podman_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_pre_fetch_only_mode(
-    mock_resolve, mock_ensure, mock_get_cli_config, mock_pull_only, mock_manager, runner
+    mock_resolve,
+    mock_ensure,
+    mock_get_cli_config,
+    mock_pull_only,
+    mock_confirm,
+    mock_manager,
+    runner,
 ):
     spec = _make_mock_spec()
     mock_resolve.return_value = [spec]
     mock_ensure.return_value = None
     mock_get_cli_config.return_value = type("Config", (), {"max_concurrent_pulls": 3})
+    mock_confirm.return_value = True
 
     result = runner.invoke(app, ["start", "--pre-fetch"])
 
@@ -120,12 +144,19 @@ def test_pre_fetch_only_mode(
 
 
 @patch("airpods.cli.commands.start.manager")
-@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.pull._confirm_image_downloads")
+@patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
 @patch("airpods.cli.commands.start.ensure_podman_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_non_verbose_uses_pull_ui(
-    mock_resolve, mock_ensure, mock_get_cli_config, mock_pull_only, mock_manager, runner
+    mock_resolve,
+    mock_ensure,
+    mock_get_cli_config,
+    mock_pull_only,
+    mock_confirm,
+    mock_manager,
+    runner,
 ):
     spec = _make_mock_spec()
     mock_resolve.return_value = [spec]
@@ -142,6 +173,7 @@ def test_start_non_verbose_uses_pull_ui(
     mock_manager.ensure_volumes.return_value = []
     mock_manager.pod_status_rows.return_value = {}
     mock_manager.container_exists.return_value = False
+    mock_confirm.return_value = True
 
     result = runner.invoke(app, ["start"])
 
@@ -152,7 +184,8 @@ def test_start_non_verbose_uses_pull_ui(
 @patch("shutil.disk_usage")
 @patch("rich.prompt.Confirm.ask")
 @patch("airpods.cli.commands.start.manager")
-@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.pull.manager")
+@patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
 @patch("airpods.cli.commands.start.ensure_podman_available")
 @patch("airpods.cli.commands.start.resolve_services")
@@ -161,6 +194,7 @@ def test_start_calls_runtime_get_remote_image_size(
     mock_ensure,
     mock_get_cli_config,
     mock_pull,
+    mock_pull_manager,
     mock_manager,
     mock_confirm_ask,
     mock_disk_usage,
@@ -188,9 +222,17 @@ def test_start_calls_runtime_get_remote_image_size(
     mock_manager.pod_status_rows.return_value = {}
     mock_manager.container_exists.return_value = False
 
-    # Mock the runtime interface to have the required methods
+    # The confirm logic lives in cli/pull.py which does "from .common import manager".
+    # Provide a properly configured manager mock for the pull module so the
+    # .runtime.get_remote_image_size call inside _confirm_image_downloads is visible.
+    mock_pull_manager.runtime.image_exists.return_value = False
+    mock_pull_manager.runtime.get_remote_image_size.return_value = (
+        1024 * 1024 * 100
+    )  # 100MB
+
+    # Keep the start-level manager in sync for any other expectations.
     mock_manager.runtime.image_exists.return_value = False
-    mock_manager.runtime.get_remote_image_size.return_value = 1024 * 1024 * 100  # 100MB
+    mock_manager.runtime.get_remote_image_size.return_value = 1024 * 1024 * 100
 
     # Mock disk usage
     from collections import namedtuple
@@ -208,13 +250,13 @@ def test_start_calls_runtime_get_remote_image_size(
     result = runner.invoke(app, ["start"])
 
     assert result.exit_code == 0
-    # Verify that get_remote_image_size was actually called
-    assert mock_manager.runtime.get_remote_image_size.called
+    # Verify that get_remote_image_size was actually called (via the manager visible to pull)
+    assert mock_pull_manager.runtime.get_remote_image_size.called
 
 
-@patch("airpods.cli.commands.start._confirm_image_downloads")
+@patch("airpods.cli.pull._confirm_image_downloads")
 @patch("airpods.cli.commands.start.manager")
-@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
 @patch("airpods.cli.commands.start.ensure_podman_available")
 @patch("airpods.cli.commands.start.resolve_services")
@@ -259,7 +301,7 @@ def test_start_auto_confirm_from_config_skips_download_prompt(
 @patch("airpods.cli.commands.start.collect_host_ports")
 @patch("airpods.cli.commands.start.detect_gpu")
 @patch("airpods.cli.commands.start.manager")
-@patch("airpods.cli.commands.start._pull_images_with_progress")
+@patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
 @patch("airpods.cli.commands.start.ensure_podman_available")
 @patch("airpods.cli.commands.start.resolve_services")
