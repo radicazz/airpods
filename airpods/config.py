@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from airpods import state
@@ -181,16 +182,15 @@ def _service_command_parts(service: ServiceConfig) -> tuple[Optional[str], List[
 
 def _get_comfyui_provider(config: AirpodsConfig):
     """Detect ComfyUI provider based on GPU capability and config."""
+    comfyui = config.services.get("comfyui")
+    if config.runtime.cuda_version == "cpu" or (
+        comfyui and (comfyui.gpu.force_cpu or not comfyui.gpu.enabled)
+    ):
+        return "yanwk"
     has_gpu, gpu_name, compute_cap = detect_cuda_compute_capability()
     # Use runtime.comfyui_provider setting (defaults to "auto")
     provider_pref = config.runtime.comfyui_provider
     return select_provider(compute_cap, provider_pref)
-
-
-def _get_comfyui_provider_env(config: AirpodsConfig) -> Dict[str, str]:
-    """Get provider-specific environment variables for ComfyUI."""
-    provider = _get_comfyui_provider(config)
-    return get_default_env(provider)
 
 
 def _service_spec_from_config(
@@ -359,6 +359,61 @@ class _RegistryProxy:
 
 
 REGISTRY = _RegistryProxy()
+
+
+def effective_service_specs(
+    specs: List[ServiceSpec],
+    *,
+    force_cpu: bool,
+    gpu_available: bool,
+    gpu_passthrough_ready: bool,
+) -> List[ServiceSpec]:
+    """Resolve the same image and mounts for pre-fetch, pulls, and launch."""
+    from dataclasses import replace
+
+    effective = []
+    for spec in specs:
+        cpu = (
+            force_cpu
+            or spec.force_cpu
+            or not spec.needs_gpu
+            or not gpu_available
+            or not gpu_passthrough_ready
+        )
+        if cpu and spec.name == "comfyui":
+            config = get_config().model_copy(deep=True)
+            service = config.services["comfyui"]
+            service.gpu.force_cpu = True
+            config.runtime.cuda_version = "cpu"
+            config.runtime.comfyui_provider = "yanwk"
+            basedir = next(
+                (mount for mount in spec.volumes if mount.target == "/basedir"), None
+            )
+            if basedir and Path(basedir.source).is_absolute():
+                from airpods.configuration.schema import VolumeMount as ConfigMount
+
+                service.volumes = {
+                    key: mount
+                    for key, mount in service.volumes.items()
+                    if mount.target not in {"/root/ComfyUI/models", "/workspace"}
+                }
+                service.volumes["cpu_models"] = ConfigMount(
+                    source=str(Path(basedir.source) / "models"),
+                    target="/root/ComfyUI/models",
+                )
+                service.volumes["cpu_workspace"] = ConfigMount(
+                    source=basedir.source, target="/workspace"
+                )
+            spec = _service_spec_from_config("comfyui", service, config)
+        elif cpu and (spec.needs_gpu or force_cpu or spec.force_cpu):
+            spec = replace(
+                spec,
+                image=spec.cpu_image or spec.image,
+                needs_gpu=False,
+                force_cpu=True,
+            )
+        effective.append(spec)
+    return effective
 
 
 def reload_registry(config: Optional[AirpodsConfig] = None) -> ServiceRegistry:

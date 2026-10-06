@@ -20,7 +20,7 @@ from airpods import ui
 from airpods.logging import console
 from airpods.services import ServiceSpec
 
-from .common import DEFAULT_PING_TIMEOUT, manager
+from .common import get_cli_config, manager
 
 
 def _format_uptime(started_at: str) -> str:
@@ -100,97 +100,50 @@ def _format_time_since(timestamp: str) -> str:
 
 
 def render_status(specs: List[ServiceSpec], *, show_legend: bool = True) -> None:
-    """Render the pod status table with enhanced state detection.
-
-    Args:
-        specs: List of service specifications to check status for.
-        show_legend: Whether to print the status legend beneath the table.
-
-    Note:
-        manager.pod_status_rows() returns a dict mapping pod names to status info,
-        or an empty dict if no pods are running.
-
-        Enhanced status detection distinguishes between:
-        - "not pulled": image not available locally
-        - "created": pod exists but container never started
-        - "stopped": container was running but is now exited
-        - "degraded": running but health check failed
-        - "failed": container crashed (exit code != 0)
-        - running with health status
-    """
-    pod_rows = manager.pod_status_rows()
-    if pod_rows is None:
-        pod_rows = {}
+    """Render service health, failure details, and friendly URLs."""
+    pod_rows = manager.pod_status_rows() or {}
     table = ui.themed_table()
-    table.add_column("Service")
-    table.add_column("Status")
-    table.add_column("Time", justify="right")
-    table.add_column("Info", no_wrap=False)
-
+    for column in ("Service", "Status", "Info"):
+        table.add_column(column)
     for spec in specs:
-        row = pod_rows.get(spec.pod) if pod_rows else None
+        row = pod_rows.get(spec.pod)
         if not row:
-            # Pod doesn't exist - check if image is pulled
-            image_exists = manager.runtime.image_exists(spec.image)
-            if not image_exists:
-                table.add_row(spec.name, "[muted]not pulled", "-", "-")
-            else:
-                table.add_row(spec.name, "[warn]stopped", "-", "-")
+            status = (
+                "[warn]stopped"
+                if manager.runtime.image_exists(spec.image)
+                else "[muted]not pulled"
+            )
+            table.add_row(spec.name, status, "-")
             continue
-
-        status = row.get("Status", "?")
-
-        uptime = "-"
-        finished_at = "-"
-        exit_code = 0
-        restart_count = 0
-
-        inspect = manager.runtime.container_inspect(spec.container)
-        if inspect and "State" in inspect:
-            state = inspect["State"]
-            # Get started time for running containers
-            if "StartedAt" in state and state["StartedAt"]:
-                uptime = _format_uptime(state["StartedAt"])
-            # Get finished time for exited containers
-            if "FinishedAt" in state and state["FinishedAt"]:
-                finished_at = _format_time_since(state["FinishedAt"])
-            # Get exit code
-            exit_code = state.get("ExitCode", 0)
-            # Get restart count
-            restart_count = inspect.get("RestartCount", 0)
-
-        if status == "Running":
-            port_bindings = manager.service_ports(spec)
-            host_ports = collect_host_ports(spec, port_bindings)
-            host_port = host_ports[0] if host_ports else None
-            health = ping_service(spec, host_port)
-            url_text = ", ".join(format_host_urls(host_ports)) if host_ports else "-"
-            table.add_row(spec.name, health, uptime, url_text)
-        elif status == "Exited":
-            port_bindings = manager.service_ports(spec)
-            ports_display = format_port_bindings(port_bindings)
-
-            # Determine status based on exit code and history
-            if uptime == "-" or uptime == "0s":
-                status_text = "[muted]created"
-                time_display = "-"
-            elif exit_code != 0:
-                status_text = f"[error]failed (exit {exit_code})"
-                time_display = finished_at if finished_at != "-" else uptime
-            elif restart_count > 3:
-                status_text = f"[error]crash loop ({restart_count} restarts)"
-                time_display = finished_at if finished_at != "-" else "-"
-            elif restart_count > 0:
-                status_text = f"[warn]restarting ({restart_count})"
-                time_display = finished_at if finished_at != "-" else "-"
+        inspect = manager.runtime.container_inspect(spec.container) or {}
+        state = inspect.get("State") or {}
+        status = state.get("Status") or row.get("Status", "?")
+        status = str(status).lower()
+        port_bindings = manager.service_ports(spec)
+        host_ports = collect_host_ports(spec, port_bindings)
+        info = format_port_bindings(port_bindings)
+        if status == "running":
+            health = ping_service(spec, host_ports[0] if host_ports else None)
+            table.add_row(
+                spec.name,
+                health if spec.health_path else "[ok]running",
+                ", ".join(format_host_urls(host_ports)) or "-",
+            )
+            continue
+        exit_code = state.get("ExitCode", 0)
+        restarts = inspect.get("RestartCount", 0)
+        if status in {"exited", "error", "dead"}:
+            started = state.get("StartedAt")
+            if exit_code:
+                status = f"failed (exit {exit_code})"
+            elif restarts > 3:
+                status = f"crash loop ({restarts} restarts)"
+            elif not started or started.startswith("0001-"):
+                status = "created"
             else:
-                status_text = "[warn]stopped"
-                time_display = finished_at if finished_at != "-" else uptime
-
-            table.add_row(spec.name, status_text, time_display, ports_display)
-        else:
-            table.add_row(spec.name, f"[warn]{status}", uptime, "-")
-
+                status = "stopped"
+        style = "error" if status.startswith(("failed", "crash loop")) else "warn"
+        table.add_row(spec.name, f"[{style}]{status}", info or "-")
     console.print(table)
     if show_legend:
         _print_status_legend()
@@ -266,71 +219,43 @@ def format_port_bindings(port_bindings: dict[str, Any]) -> str:
     return ", ".join(ports) if ports else "-"
 
 
+def _probe_service(spec: ServiceSpec, port: Optional[int], timeout: float | None):
+    if not spec.health_path or port is None:
+        return None, 0.0, None
+    conn = None
+    start = time.perf_counter()
+    try:
+        conn = http.client.HTTPConnection(
+            "127.0.0.1",
+            port,
+            timeout=timeout if timeout is not None else get_cli_config().ping_timeout,
+        )
+        conn.request("GET", spec.health_path)
+        code = conn.getresponse().status
+        return code, (time.perf_counter() - start) * 1000, None
+    except (OSError, http.client.HTTPException) as exc:
+        return None, 0.0, type(exc).__name__
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def ping_service(
     spec: ServiceSpec, port: Optional[int], *, timeout: float | None = None
 ) -> str:
-    """Ping a service's health endpoint and return status.
-
-    Args:
-        spec: Service specification containing health_path
-        port: Host port to connect to
-        timeout: Optional override for the ping timeout (falls back to CLI config / default)
-
-    Returns:
-        Formatted status string with HTTP code and latency, or error type
-    """
-    if not spec.health_path or port is None:
+    code, latency, error = _probe_service(spec, port, timeout)
+    if error:
+        return f"[warn]{error}"
+    if code is None:
         return "-"
-    ping_timeout = timeout if timeout is not None else DEFAULT_PING_TIMEOUT
-    try:
-        start = time.perf_counter()
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=ping_timeout)
-        conn.request("GET", spec.health_path)
-        resp = conn.getresponse()
-        code = resp.status
-        conn.close()
-        elapsed_ms = (time.perf_counter() - start) * 1000
-        expected_start, expected_end = spec.health_expected_status
-        if expected_start <= code <= expected_end:
-            return f"[ok]{code} ({elapsed_ms:.0f} ms)"
-        return f"[warn]{code} ({elapsed_ms:.0f} ms)"
-    except (
-        socket.error,
-        http.client.HTTPException,
-        OSError,
-        ConnectionError,
-        TimeoutError,
-    ) as exc:
-        return f"[warn]{type(exc).__name__}"
-    except Exception as exc:
-        # Fallback for unexpected errors; log for debugging
-        console.print(f"[dim]Unexpected error pinging {spec.name}: {exc}[/dim]")
-        return f"[error]{type(exc).__name__}"
+    low, high = spec.health_expected_status
+    style = "ok" if low <= code <= high else "warn"
+    return f"[{style}]{code} ({latency:.0f} ms)"
 
 
 def check_service_health(
     spec: ServiceSpec, port: Optional[int], *, timeout: float | None = None
 ) -> bool:
-    """Check if a service is healthy (returns True/False).
-
-    Args:
-        spec: Service specification containing health_path
-        port: Host port to connect to
-        timeout: Optional override for the ping timeout (falls back to CLI config / default)
-
-    Returns:
-        True if service is healthy (2xx-3xx response), False otherwise
-    """
-    if not spec.health_path or port is None:
-        return False
-    ping_timeout = timeout if timeout is not None else DEFAULT_PING_TIMEOUT
-    try:
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=ping_timeout)
-        conn.request("GET", spec.health_path)
-        resp = conn.getresponse()
-        code = resp.status
-        conn.close()
-        expected_start, expected_end = spec.health_expected_status
-        return expected_start <= code <= expected_end
-    except Exception:
-        return False
+    code, _, _ = _probe_service(spec, port, timeout)
+    low, high = spec.health_expected_status
+    return code is not None and low <= code <= high

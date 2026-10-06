@@ -7,21 +7,18 @@ from typing import Optional
 import typer
 
 from airpods import ui
-from airpods import __version__
 from airpods.logging import console, status_spinner
 from airpods.system import detect_gpu, detect_cuda_compute_capability
 from airpods.cuda import select_cuda_version, get_cuda_info_display
 from airpods.services import ServiceSpec
 from airpods.configuration import get_config
 from airpods import gguf, state
-from dataclasses import replace
 
 from ..common import (
     COMMAND_CONTEXT,
     ensure_runtime_available,
     is_verbose_mode,
     manager,
-    print_network_status,
     print_volume_status,
     print_config_info,
     refresh_cli_context,
@@ -118,6 +115,14 @@ def register(app: typer.Typer) -> CommandMap:
         yes = yes or bool(getattr(cli_config, "auto_confirm", False))
         max_concurrent_pulls = 1 if sequential else cli_config.max_concurrent_pulls
 
+        gpu_available, gpu_detail = detect_gpu()
+        specs = config_module.effective_service_specs(
+            specs,
+            force_cpu=force_cpu,
+            gpu_available=gpu_available,
+            gpu_passthrough_ready=manager.gpu_device_flag is not None,
+        )
+
         if pre_fetch:
             specs_for_download: list[ServiceSpec] = []
             for spec in specs:
@@ -155,7 +160,12 @@ def register(app: typer.Typer) -> CommandMap:
             row = pod_rows.get(spec.pod)
             if row and row.get("Status") == "Running":
                 # Verify the container is actually running
-                if manager.container_exists(spec):
+                inspect = manager.runtime.container_inspect(spec.container) or {}
+                container_state = inspect.get("State") or {}
+                if (
+                    container_state.get("Running") is True
+                    or container_state.get("Status") == "running"
+                ):
                     already_running.append(spec)
                 else:
                     needs_start.append(spec)
@@ -202,7 +212,22 @@ def register(app: typer.Typer) -> CommandMap:
             console.print("[ok]All services already running[/]")
             from airpods.cli.status_view import render_status
 
-            render_status(specs)
+            if wait:
+                _launch.perform_start(
+                    [],
+                    cli_config=cli_config,
+                    verbose=verbose,
+                    wait=True,
+                    force_cpu=force_cpu,
+                    yes=yes,
+                    max_concurrent_pulls=max_concurrent_pulls,
+                    custom_nodes_list=custom_nodes_list,
+                    manager=manager,
+                    gpu_available=gpu_available,
+                    already_running=specs,
+                )
+            else:
+                render_status(specs)
             return
 
         # Report what's already running
@@ -216,7 +241,6 @@ def register(app: typer.Typer) -> CommandMap:
 
         # Show GPU status (verbose only)
         if verbose:
-            gpu_available, gpu_detail = detect_gpu()
             if gpu_available:
                 console.print(f"GPU: [ok]enabled[/] ({gpu_detail})")
             else:
@@ -244,9 +268,6 @@ def register(app: typer.Typer) -> CommandMap:
                         has_gpu_cap, gpu_name_cap, compute_cap, "cu126"
                     )
                     console.print(f"CUDA: [muted]{cuda_info}[/]")
-        else:
-            gpu_available, gpu_detail = detect_gpu()
-
         with status_spinner("Ensuring volumes"):
             volume_results = manager.ensure_volumes(specs_to_start)
         print_volume_status(volume_results, verbose=verbose)
@@ -258,29 +279,8 @@ def register(app: typer.Typer) -> CommandMap:
         # Plugins were already synced above for all requested services.
 
         # Simple log-based startup process
-        service_urls: dict[str, str] = {}
-        failed_services = []
-        timeout_services = []
-
-        def _effective_spec(spec: ServiceSpec) -> ServiceSpec:
-            gpu_passthrough_ready = manager.gpu_device_flag is not None
-            use_cpu_image = force_cpu or not gpu_available or not gpu_passthrough_ready
-            if (
-                spec.name == "llamacpp"
-                and use_cpu_image
-                and spec.cpu_image
-                and spec.cpu_image != spec.image
-            ):
-                return replace(
-                    spec,
-                    image=spec.cpu_image,
-                    needs_gpu=False,
-                    force_cpu=True,
-                )
-            return spec
-
         specs_for_download: list[ServiceSpec] = []
-        for spec in (_effective_spec(spec) for spec in specs_to_start):
+        for spec in specs_to_start:
             exists = manager.runtime.image_exists(spec.image)
             if exists is True:
                 continue
@@ -374,10 +374,6 @@ def register(app: typer.Typer) -> CommandMap:
         elif verbose:
             console.print("[info]Images already present; skipping pulls[/]")
 
-        # Delegate the heavy remaining work (launch loop + effective spec + CPU
-        # fallback, --wait health polling + summaries, auto-Ollama, final hooks,
-        # update hint) to the extracted perform_start. This (together with the
-        # earlier extractions) completes the split.
         _launch.perform_start(
             specs_to_start,
             cli_config=cli_config,
@@ -388,12 +384,8 @@ def register(app: typer.Typer) -> CommandMap:
             max_concurrent_pulls=max_concurrent_pulls,
             custom_nodes_list=custom_nodes_list,
             manager=manager,
+            gpu_available=gpu_available,
+            already_running=already_running,
         )
-
-        # The old duplicated launch/wait/ollama-auto/final-hooks code has been
-        # completely removed. All of it now lives (and is the single source of
-        # truth) in launch.perform_start (called above). The thin start command
-        # only owns the Typer surface, first-run config, pre-flight (llama/gguf,
-        # volumes, pull decision), early returns, and top-level UX.
 
     return {"start": start}

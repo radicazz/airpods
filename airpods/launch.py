@@ -16,11 +16,14 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from airpods.cli.common import manager
 from airpods.logging import console, status_spinner
 from airpods.services import ServiceSpec
+
+if TYPE_CHECKING:
+    from airpods.configuration.schema import CLIConfig, CustomNodeInstall
 
 # NOTE: CLIConfig and CustomNodeInstall are only used in annotations and
 # are kept as strings or imported inside the small number of functions that
@@ -347,62 +350,28 @@ def perform_start(
     max_concurrent_pulls: int,
     custom_nodes_list: list | None = None,
     manager: object | None = None,
+    gpu_available: bool | None = None,
+    already_running: list[ServiceSpec] | None = None,
 ) -> None:
-    """Core orchestration for starting the requested (and needed) services.
-
-    This encapsulates GPU display, llama preflight+GGUF download, image pulls,
-    the launch loop with effective spec/CPU fallback, the --wait readiness
-    polling, summaries, auto Ollama model pulls, final post-start hooks
-    (plugin import, custom node reqs), and the post-start update hint.
-
-    Called by the thin start command after it has done first-run config
-    creation, resolve, early already-running detection + initial sync/prepare,
-    and volume ensure for the to-start set.
-    """
+    """Launch resolved specs, wait for readiness, and run post-start hooks."""
     # Use the passed manager or fall back to the cli proxy (for tests / IoC prep)
     mgr = manager or __import__("airpods.cli.common", fromlist=["manager"]).manager
 
-    from airpods import ui
     from airpods import __version__ as _airpods_version
-    from airpods.system import detect_gpu, detect_cuda_compute_capability
-    from airpods.cuda import select_cuda_version, get_cuda_info_display
     from airpods.configuration import get_config
-    from airpods import gguf, state
-    from airpods.ollama import format_size as _format_size  # not directly needed here
     from airpods.cli.common import get_ollama_port
     from airpods.cli import pull as _pull_cli
     from airpods.cli.status_view import check_service_health, collect_host_ports
 
-    # GPU/CUDA display, volumes, llama preflight, and image pull/confirm are
-    # handled by the thin command (for correct UX ordering and to keep the
-    # existing test patches on start.* and pull.* working as written).
-    # We only compute gpu_available here for _effective_spec / launch messages.
-    gpu_available, _ = detect_gpu()
+    if gpu_available is None:
+        from airpods.system import detect_gpu
 
-    # Simple log-based startup process. The caller has already decided which
-    # images (if any) needed pulling and has invoked the pull UI if necessary.
+        gpu_available, _ = detect_gpu()
+
+    selected_specs = specs_to_start + (already_running or [])
     service_urls: dict[str, str] = {}
     failed_services: list[str] = []
     timeout_services: list[str] = []
-
-    def _effective_spec(spec: ServiceSpec) -> ServiceSpec:
-        gpu_passthrough_ready = getattr(mgr, "gpu_device_flag", None) is not None
-        use_cpu_image = force_cpu or not gpu_available or not gpu_passthrough_ready
-        if (
-            spec.name == "llamacpp"
-            and use_cpu_image
-            and getattr(spec, "cpu_image", None)
-            and spec.cpu_image != spec.image
-        ):
-            from dataclasses import replace as _replace
-
-            return _replace(
-                spec,
-                image=spec.cpu_image,
-                needs_gpu=False,
-                force_cpu=True,
-            )
-        return spec
 
     # Start services with simple logging
     for spec in specs_to_start:
@@ -411,24 +380,8 @@ def perform_start(
 
         try:
             with status_spinner(f"Launching {spec.name}"):
-                effective_spec = _effective_spec(spec)
-                if effective_spec is not spec:
-                    if force_cpu:
-                        message = "llamacpp: forcing CPU image."
-                    elif not gpu_available:
-                        message = (
-                            "llamacpp GPU requested but no GPU detected; "
-                            "falling back to CPU image."
-                        )
-                    else:
-                        message = (
-                            "llamacpp GPU passthrough not configured; "
-                            "falling back to CPU image."
-                        )
-                    console.print(f"[warn]{message}[/]")
-
                 mgr.start_service(
-                    effective_spec,
+                    spec,
                     gpu_available=gpu_available,
                     force_cpu_override=force_cpu,
                 )
@@ -488,7 +441,7 @@ def perform_start(
         return
 
     # Wait for health checks with timeout
-    start_time = time.time()
+    start_time = time.monotonic()
     timeout_seconds = cli_config.startup_timeout
     check_interval = cli_config.startup_check_interval
 
@@ -496,7 +449,7 @@ def perform_start(
         f"Waiting for services to become ready (up to {timeout_seconds}s)"
     ) as status:
         while True:
-            elapsed = time.time() - start_time
+            elapsed = time.monotonic() - start_time
             if elapsed >= timeout_seconds:
                 break
 
@@ -504,7 +457,7 @@ def perform_start(
             all_done = True
             pending: list[str] = []
 
-            for spec in specs_to_start:
+            for spec in selected_specs:
                 if spec.name in failed_services:
                     continue
 
@@ -542,7 +495,12 @@ def perform_start(
                     continue
 
                 if check_service_health(
-                    spec, host_port, timeout=cli_config.ping_timeout
+                    spec,
+                    host_port,
+                    timeout=min(
+                        cli_config.ping_timeout,
+                        max(0.001, timeout_seconds - (time.monotonic() - start_time)),
+                    ),
                 ):
                     service_urls[spec.name] = f"http://localhost:{host_port}"
                 else:
@@ -559,10 +517,15 @@ def perform_start(
             else:
                 status.update(f"[info]Waiting ({remaining}s left)[/]")
 
-            time.sleep(check_interval)
+            time.sleep(
+                min(
+                    check_interval,
+                    max(0, timeout_seconds - (time.monotonic() - start_time)),
+                )
+            )
 
     # Handle timeouts
-    for spec in specs_to_start:
+    for spec in selected_specs:
         if spec.name not in failed_services and spec.name not in service_urls:
             timeout_services.append(spec.name)
 
@@ -589,7 +552,6 @@ def perform_start(
             f"[error]✗ Failed services: {', '.join(failed)}. "
             "Check logs with 'airpods logs'[/]"
         )
-        raise __import__("typer").Exit(code=1)
 
     if timeout_services:
         console.print(
@@ -597,8 +559,11 @@ def perform_start(
             "Services may still be starting. Check with 'airpods status'[/]"
         )
 
+    if failed or timeout_services:
+        raise __import__("typer").Exit(code=1)
+
     # Auto-pull Ollama models if configured and service is healthy
-    ollama_specs = [s for s in specs_to_start if s.name == "ollama"]
+    ollama_specs = [s for s in selected_specs if s.name == "ollama"]
     if ollama_specs and "ollama" in service_urls and "ollama" not in failed_services:
         from airpods import ollama as ollama_module
 
@@ -638,11 +603,11 @@ def perform_start(
     # Auto-import plugins into Open WebUI if service is healthy
     if "open-webui" in service_urls and "open-webui" not in failed_services:
         _maybe_import_webui_plugins(
-            specs_to_start, cli_config=cli_config, verbose=verbose
+            selected_specs, cli_config=cli_config, verbose=verbose
         )
 
     # Re-attempt after readiness checks so requirements are installed when
     # ComfyUI startup is slower than container launch.
     _maybe_install_custom_node_requirements(
-        specs_to_start, nodes=custom_nodes_list or [], verbose=verbose
+        selected_specs, nodes=custom_nodes_list or [], verbose=verbose
     )

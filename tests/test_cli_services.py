@@ -8,7 +8,7 @@ from airpods.cli import app
 from airpods.services import ServiceSpec
 
 
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.manager")
 @patch("airpods.cli.common.manager")
 def test_unknown_service_error(
@@ -40,7 +40,7 @@ def _make_mock_spec() -> ServiceSpec:
 @patch("airpods.cli.pull._confirm_image_downloads")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_respects_configured_concurrency(
     mock_resolve,
@@ -79,7 +79,7 @@ def test_start_respects_configured_concurrency(
 @patch("airpods.cli.pull._confirm_image_downloads")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_sequential_flag_forces_single_pull(
     mock_resolve,
@@ -118,7 +118,7 @@ def test_start_sequential_flag_forces_single_pull(
 @patch("airpods.cli.pull._confirm_image_downloads")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_pre_fetch_only_mode(
     mock_resolve,
@@ -147,7 +147,7 @@ def test_pre_fetch_only_mode(
 @patch("airpods.cli.pull._confirm_image_downloads")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_non_verbose_uses_pull_ui(
     mock_resolve,
@@ -187,7 +187,7 @@ def test_start_non_verbose_uses_pull_ui(
 @patch("airpods.cli.pull.manager")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_calls_runtime_get_remote_image_size(
     mock_resolve,
@@ -258,7 +258,7 @@ def test_start_calls_runtime_get_remote_image_size(
 @patch("airpods.cli.commands.start.manager")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_auto_confirm_from_config_skips_download_prompt(
     mock_resolve,
@@ -302,7 +302,7 @@ def test_start_auto_confirm_from_config_skips_download_prompt(
 @patch("airpods.cli.commands.start.manager")
 @patch("airpods.cli.pull._pull_images_with_progress")
 @patch("airpods.cli.commands.start.get_cli_config")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.resolve_services")
 def test_start_wait_retries_custom_node_requirements_after_readiness(
     mock_resolve,
