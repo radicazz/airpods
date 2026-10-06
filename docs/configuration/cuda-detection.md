@@ -12,12 +12,14 @@ Airpods automatically detects your GPU and selects the right CUDA version for Co
 ## Configuration
 
 ### Auto-Detection (Default)
+
 ```toml
 [runtime]
 cuda_version = "auto"  # Let airpods choose
 ```
 
 ### Manual Override
+
 ```toml
 [runtime]
 cuda_version = "cu126"  # Force CUDA 12.6
@@ -28,6 +30,7 @@ cuda_override = "cu128"  # Force CUDA 12.8 for ComfyUI only
 ```
 
 ### CPU Only
+
 ```toml
 [runtime]
 cuda_version = "cpu"  # Disable GPU
@@ -42,6 +45,7 @@ airpods doctor  # Shows detected GPU and CUDA version
 ## Common Issues
 
 **GPU not being used?** Try forcing CUDA 12.6:
+
 ```toml
 [services.comfyui]
 cuda_override = "cu126"
@@ -51,11 +55,11 @@ cuda_override = "cu126"
 
 ## GPU → CUDA Mapping
 
-| GPU Series | CUDA Version | Image |
-|-----------|--------------|-------|
-| GTX 10/RTX 20 series | cu126 | cu126-megapak |
-| RTX 30/40 series | cu128 | cu128-slim |
-| Older GPUs | cu118 | cu118-slim |
-| No GPU | cpu | cpu |
+| GPU Series           | CUDA Version | Image         |
+| -------------------- | ------------ | ------------- |
+| GTX 10/RTX 20 series | cu126        | cu126-megapak |
+| RTX 30/40 series     | cu128        | cu128-slim    |
+| Older GPUs           | cu118        | cu118-slim    |
+| No GPU               | cpu          | cpu           |
 
 The default fallback (cu126) works with most modern GPUs.

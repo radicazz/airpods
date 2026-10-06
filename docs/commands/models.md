@@ -16,6 +16,7 @@ airpods models ls
 ```
 
 **Output example:**
+
 ```
 ┌──────────────┬──────────┬──────────┬────────────────┐
 │ Model        │ Size     │ Modified │ Family         │
@@ -32,6 +33,7 @@ Total storage: 7.0 GB (2 models)
 Pull a model from Ollama library or HuggingFace (auto-detected).
 
 The pull command intelligently detects the source:
+
 - **Ollama tags** (no `/`): `llama3.2`, `qwen2.5:7b` → pulls from Ollama library
 - **HuggingFace repos** (contains `/`): `bartowski/Llama-3.2-3B-Instruct-GGUF` → pulls from HuggingFace
 
@@ -49,16 +51,19 @@ airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF \
 ```
 
 **Options (for HuggingFace repos):**
+
 - `--file, -f`: Specify GGUF filename (otherwise prompted)
 - `--name, -n`: Specify model name in Ollama (otherwise auto-generated)
 
 **Features:**
+
 - Automatic source detection (Ollama vs HuggingFace)
 - Real-time progress bar with download speed
 - Automatic model size detection
 - Interactive file selection for HuggingFace repos with multiple GGUF files
 
 **Browse models:**
+
 - Ollama library: https://ollama.com/library
 - HuggingFace GGUF: https://huggingface.co/models?library=gguf
 
@@ -75,6 +80,7 @@ airpods models remove llama3.2 --force
 ```
 
 **Options:**
+
 - `--force, -f`: Skip confirmation prompt
 
 **Shell completion:** Tab-completion for model names when Ollama is running.
@@ -88,10 +94,11 @@ airpods models info llama3.2
 ```
 
 **Output includes:**
+
 - Model name and license
 - Model family and parameter count
 - Quantization level
--  Total size
+- Total size
 - Modelfile content
 - Parameters
 - Prompt template (truncated if long)
@@ -108,6 +115,7 @@ airpods models search qwen --limit 10
 ```
 
 **Options:**
+
 - `--limit, -l`: Maximum number of results (default: `5`)
 
 ### `airpods models gguf list`
@@ -141,6 +149,7 @@ airpods models gguf remove my-model.gguf
 Configure models to be automatically pulled when Ollama starts:
 
 **config.toml:**
+
 ```toml
 [services.ollama]
 enabled = true
@@ -152,12 +161,14 @@ Models are only pulled if not already installed, so this is safe to run repeated
 ## Examples
 
 **Pull and test a model:**
+
 ```bash
 airpods models pull llama3.2
 airpods models info llama3.2
 ```
 
 **Import a quantized model from HuggingFace:**
+
 ```bash
 # Interactive - will prompt for file selection and name
 airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF
@@ -169,6 +180,7 @@ airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF \
 ```
 
 **Clean up old models:**
+
 ```bash
 # List models to see what's installed
 airpods models list
@@ -180,6 +192,7 @@ airpods models remove old-model-name --force
 ## Aliases
 
 The following command aliases are available:
+
 - `model` → `models` (singular form)
 - `ls` → `list` (short form)
 - `rm` → `remove` (short form)

@@ -20,6 +20,7 @@
 ## Implementation Status (Current)
 
 **Shipped**
+
 - `llamacpp` service spec with CPU/GPU image selection and `/health` probing.
 - GGUF store volume at `bind://airpods_models/gguf` with CLI helpers (`airpods models gguf pull/list/remove`).
 - Start-time model validation with optional auto-download of a default GGUF (`default_model_url`).
@@ -27,6 +28,7 @@
 - Image registry normalization to `ghcr.io/ggml-org/llama.cpp`.
 
 **Still Pending**
+
 - ComfyUI custom nodes (`plugins/comfyui/custom_nodes/comfyui-airpods/`) for llama.cpp HTTP API.
 - Optional docs covering Open WebUI + llama.cpp backend wiring and ComfyUI workflow examples.
 

@@ -11,8 +11,13 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown/YAML/TOML)
-        files: '\\.(md|ya?ml|toml)$'
-        args: ['--check']
+        entry: python3 scripts/prettier.py
+        language_version: "22.23.3"
+        additional_dependencies:
+          - prettier@3.9.9
+          - prettier-plugin-toml@3.0.2
+        files: '\.(md|ya?ml|toml)$'
+        args: ["--check"]
   - repo: local
     hooks:
       - id: uv-format

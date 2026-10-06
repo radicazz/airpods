@@ -1,9 +1,11 @@
 # Agents & Plan
 
 ## Intent
+
 Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as the `airpods` command via uv tools) that orchestrates local AI services via container runtimes (Podman or Docker). Services are configurable via TOML files with template support. Services: Ollama, Open WebUI, ComfyUI (provider/CUDA selectable), and llama.cpp server (GGUF-capable).
 
 ## Command Surface
+
 - Global options: `-v/--version` prints the CLI version; `-V/--verbose` enables detailed output; `-h/--help` shows the custom help view plus alias table.
 - `start [service...]`: Ensures volumes/images, then launches pods (default: all enabled services) while explaining when volumes, pods, or containers are reused vs newly created. After pre-flight checks/validations (runtime, already-running detection, volumes, GPU/CUDA, llama model presence, etc.) shows a confirmation listing the services that will be started (skip with `--yes`). Also shows download confirmation with sizes and disk space checks (skip with `--yes`). When `--wait` is set, waits for each service to report healthy (HTTP ping when available) for up to `cli.startup_timeout` seconds, polling every `cli.startup_check_interval` seconds; services without HTTP health are treated as ready when their pod is running. Skips recreation if containers are already running. GPU auto-detected and attached when enabled; CPU fallback allowed. `--pre-fetch` downloads service images and exits without starting containers for ahead-of-time cache warmups. Service aliases: `comfy`/`comfyui`/`comfy-ui` → `comfyui`, `llama`/`llama-cpp`/`llama.cpp` → `llamacpp`. Exposed aliases: `up`, `run`.
 - `stop [service...]`: Graceful stop; optional removal of pods while preserving volumes by default, with an interactive confirmation prompt before destructive removal. Exposed aliases: `down`.
@@ -48,6 +50,7 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
   - `set <key> <value>`: Update specific value with validation
 
 ## Architecture Notes
+
 - CLI package layout:
   - `airpods/cli/__init__.py` – creates the Typer app, registers commands, exposes legacy compatibility helpers.
   - `airpods/cli/common.py` – shared constants, service manager, and runtime/dependency helpers.
@@ -75,6 +78,7 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 - Errors surfaced with clear remediation (install runtime, start podman machine, check GPU drivers, etc.).
 
 ## Data & Images
+
 - Volumes: bind mounts under `$AIRPODS_HOME/volumes/` (resolved from `bind://...`) including `airpods_ollama_data`, `airpods_webui_data`, `webui_plugins`, `airpods_comfyui_data`, `comfyui_custom_nodes`, `comfyui/workspace`, and the shared GGUF store `airpods_models/gguf`.
 - Images: `docker.io/ollama/ollama:latest`, `ghcr.io/open-webui/open-webui:latest`, ComfyUI image selected by `runtime.cuda_version` + `runtime.comfyui_provider`, and `ghcr.io/ggml-org/llama.cpp:server` (or `:server-cuda` when GPU-enabled); pulled during `start` (or via `start --pre-fetch`).
 - Secrets: Open WebUI secret persisted at `$AIRPODS_HOME/configs/webui_secret` (or `$XDG_CONFIG_HOME/airpods/configs/webui_secret` or `~/.config/airpods/configs/webui_secret`) during `start` when Open WebUI is enabled, injected via the `needs_webui_secret` flag.
@@ -83,12 +87,14 @@ Provide a Rich + Typer-powered CLI (packaged under `airpods/cli/`, installed as 
 - Plugins: Open WebUI plugins live in `plugins/open-webui/` and are synced to `webui_plugins` volume during `start`. ComfyUI custom nodes live in `plugins/comfyui/custom_nodes/` and are synced to `comfyui_custom_nodes` volume during `start`. Both support directory-based packages and single-file modules.
 
 ## Testing Approach
+
 - Unit tests mock subprocess interactions to validate command flow and flags.
 - Configuration tests verify schema validation, template resolution, and file merging.
 - Test fixtures isolate config artifacts per test via `AIRPODS_HOME` override.
 - Integration (later): optional Podman-in-Podman smoke tests; GPU checks skipped when unavailable.
 
 ## Development Workflow
+
 - Version bump rules (update `pyproject.toml` before committing):
   - Patch bump (e.g., `0.9.1` → `0.9.2`) for bug fixes and small UX/behavior improvements.
   - Minor bump (e.g., `0.9.1` → `0.10.0`) for large features or meaningful command-surface additions.

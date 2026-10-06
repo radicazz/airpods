@@ -99,7 +99,7 @@ Generate:
   "prompt": "Write a two sentence summary of GGUF.",
   "system": "You are concise.",
   "stream": false,
-  "options": {"temperature": 0.7, "top_p": 0.95}
+  "options": { "temperature": 0.7, "top_p": 0.95 }
 }
 ```
 
@@ -109,11 +109,11 @@ Chat:
 {
   "model": "llama3.1:8b",
   "messages": [
-    {"role": "system", "content": "You are concise."},
-    {"role": "user", "content": "Explain KV cache in one paragraph."}
+    { "role": "system", "content": "You are concise." },
+    { "role": "user", "content": "Explain KV cache in one paragraph." }
   ],
   "stream": false,
-  "options": {"temperature": 0.7}
+  "options": { "temperature": 0.7 }
 }
 ```
 

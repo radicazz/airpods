@@ -107,8 +107,8 @@ Chat completion:
 {
   "model": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
   "messages": [
-    {"role": "system", "content": "You are concise."},
-    {"role": "user", "content": "Explain KV cache in one paragraph."}
+    { "role": "system", "content": "You are concise." },
+    { "role": "user", "content": "Explain KV cache in one paragraph." }
   ],
   "max_tokens": 256,
   "temperature": 0.7
