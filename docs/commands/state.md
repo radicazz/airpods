@@ -5,6 +5,7 @@ The `airpods state` command group manages local state. Use it to back up, restor
 ## `airpods state backup`
 
 Create a compressed archive containing:
+
 - `configs/` (config.toml, webui_secret, other config files)
 - Open WebUI database (`webui.db`) plus optional SQLite `.dump`
 - Open WebUI plugins stored under `webui_plugins`
@@ -20,9 +21,10 @@ airpods state backup --dest ~/backups --filename my-airpods.tgz --no-sql-dump
 ```
 
 **Options:**
+
 - `--dest PATH`: Directory to store the archive (default: `cwd`)
 - `--filename NAME`: Override archive filename
-- `--sql-dump/--no-sql-dump`: Include SQLite `.dump` via running container (default: on)
+- `--sql-dump/--no-sql-dump`: Include SQL dump from the consistent database snapshot (default: on)
 
 > [!NOTE]
 > Model binaries (GGUF, diffusion checkpoints, etc.) aren’t copied. Only metadata is captured so you can re-pull the exact models later.
@@ -40,14 +42,16 @@ airpods state restore archive.tgz --skip-db --skip-models
 ```
 
 **Arguments & Options:**
+
 - `<archive>`: Path to `.tar.gz` produced by `airpods state backup`
 - `--backup-existing/--no-backup-existing`: Copy current configs/DB before overwrite (default: on)
 - `--skip-configs`: Don’t restore config files
-- `--skip-db`: Don’t restore Open WebUI database (raw copy or SQL dump)
+- `--skip-db`: Don’t restore Open WebUI database (snapshot or SQL dump)
 - `--skip-plugins`: Don’t restore plugin files
 - `--skip-models`: Don’t restore Ollama metadata JSON
 
 ### Restore Workflow
+
 1. Validate archive and extract into a temp directory
 2. Copy configs into `$AIRPODS_HOME/configs` (optionally backing up current files)
 3. Restore WebUI database (`webui.db`) or rebuild from `.dump`
@@ -56,7 +60,9 @@ airpods state restore archive.tgz --skip-db --skip-models
 6. Print reminders to re-pull Ollama models and restart services
 
 ### Best Practices
-- Run `airpods stop` before backing up to ensure clean SQLite copies
+
+- Backups include committed SQLite WAL data while Open WebUI is running
+- Stop Open WebUI before restoring its database; use `--skip-db` to leave it running
 - Store archives outside of `$AIRPODS_HOME` so they survive `airpods state clean --all`
 - After restoring, re-pull Ollama models using the metadata file saved in `configs/restores/`
 - Keep sensitive archives encrypted if they contain user data
@@ -82,6 +88,7 @@ airpods state clean --all --dry-run
 ```
 
 **Options:**
+
 - `--all, -a`: Remove all targets (pods, volumes, images, configs)
 - `--pods, -p`: Stop and remove service pods/containers
 - `--volumes, -v`: Remove configured container volumes and bind-mounted data directories
@@ -92,6 +99,7 @@ airpods state clean --all --dry-run
 - `--backup-config / --no-backup-config`: Backup `config.toml` before deleting configs (default: backup enabled)
 
 **Notes:**
+
 - Running `state clean` without target flags exits with a usage error.
 - `--dry-run` is the safest way to confirm exactly what will be touched.
 - `--all` expands to `--pods --volumes --images --configs`.

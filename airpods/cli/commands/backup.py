@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import datetime as _dt
+from contextlib import closing
 import json
-import os
 import shutil
 import sqlite3
 import subprocess
 import tarfile
 import tempfile
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -28,8 +27,6 @@ from ..common import (
 )
 from ..help import command_help_option, maybe_show_command_help
 from ..type_defs import CommandMap
-
-ensure_podman_available = ensure_runtime_available
 
 BACKUP_PREFIX = "airpods-backup"
 BACKUP_ROOT = "airpods_backup"
@@ -130,28 +127,33 @@ def _collect_webui_db(staging_dir: Path) -> bool:
         return False
     dest = staging_dir / BACKUP_PATHS["webui_db"]
     _ensure_dir(dest.parent)
-    shutil.copy2(src, dest)
+    _snapshot_sqlite(src, dest)
     return True
+
+
+def _snapshot_sqlite(src: Path, dest: Path) -> None:
+    try:
+        with closing(
+            sqlite3.connect(src.resolve().as_uri() + "?mode=ro", uri=True)
+        ) as source:
+            with closing(sqlite3.connect(dest)) as target:
+                source.backup(target)
+                if target.execute("PRAGMA quick_check").fetchone() != ("ok",):
+                    raise RestoreError("SQLite database integrity check failed")
+    except sqlite3.Error as exc:
+        raise RestoreError(f"Invalid SQLite database: {exc}") from exc
 
 
 def _dump_webui_db(
     runtime, staging_dir: Path, sql_dump: bool, container: Optional[str]
 ) -> bool:
-    if not sql_dump or not container:
+    snapshot = staging_dir / BACKUP_PATHS["webui_db"]
+    if not sql_dump or not snapshot.exists():
         return False
     dest = staging_dir / BACKUP_PATHS["webui_dump"]
     _ensure_dir(dest.parent)
-    try:
-        result = _run_runtime_exec(
-            runtime,
-            container,
-            ["sqlite3", "/app/backend/data/webui.db", ".dump"],
-            timeout=90,
-        )
-    except BackupError as exc:
-        console.print(f"[warn]SQLite dump failed (container unavailable?): {exc}[/]")
-        return False
-    dest.write_text(result.stdout, encoding="utf-8")
+    with closing(sqlite3.connect(snapshot)) as connection:
+        dest.write_text("\n".join(connection.iterdump()), encoding="utf-8")
     return True
 
 
@@ -278,27 +280,34 @@ def _create_archive(staging_dir: Path, output_path: Path) -> None:
 
 
 def _safe_extractall(tar: tarfile.TarFile, target: Path) -> None:
-    """Extract members ensuring paths stay within target directory."""
+    """Conservative fallback for interpreters without extraction filters."""
     target_path = target.resolve()
-
-    def _is_within_directory(base: Path, candidate: Path) -> bool:
-        base_str = str(base)
-        candidate_str = str(candidate)
-        return os.path.commonpath([base_str, candidate_str]) == base_str
-
-    for member in tar.getmembers():
-        member_path = (target_path / member.name).resolve()
-        if not _is_within_directory(target_path, member_path):
-            raise RestoreError(
-                f"Archive member {member.name} escapes target directory; aborting restore."
-            )
-    tar.extractall(target_path)
+    members = tar.getmembers()
+    for member in members:
+        destination = (target_path / member.name).resolve()
+        if (
+            Path(member.name).is_absolute()
+            or ".." in Path(member.name).parts
+            or "\\" in member.name
+            or not destination.is_relative_to(target_path)
+            or not (member.isfile() or member.isdir())
+        ):
+            raise RestoreError(f"Unsafe archive member: {member.name}")
+    for member in members:
+        destination = target_path / member.name
+        if member.isdir():
+            destination.mkdir(parents=True, exist_ok=True)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with tar.extractfile(member) as source, destination.open("wb") as dest:
+                shutil.copyfileobj(source, dest)
+            destination.chmod(member.mode & 0o777)
 
 
 def _extract_archive(archive: Path, target: Path) -> Path:
     try:
         with tarfile.open(archive, "r:*") as tar:
-            if sys.version_info >= (3, 12):
+            if hasattr(tarfile, "data_filter"):
                 tar.extractall(target, filter="data")
             else:
                 _safe_extractall(tar, target)
@@ -333,7 +342,10 @@ def _backup_existing_path(path: Path) -> Optional[Path]:
         shutil.copytree(path, backup_path)
     else:
         _ensure_dir(backup_path.parent)
-        shutil.copy2(path, backup_path)
+        if path.suffix == ".db":
+            _snapshot_sqlite(path, backup_path)
+        else:
+            shutil.copy2(path, backup_path)
     console.print(f"[info]Existing {path} backed up to {backup_path}")
     return backup_path
 
@@ -351,36 +363,56 @@ def _restore_configs(src: Path, backup_existing: bool) -> bool:
 
 
 def _hydrate_sqlite_from_dump(dump_path: Path, dest: Path) -> None:
-    _ensure_dir(dest.parent)
-    if dest.exists():
-        dest.unlink()
-    conn = sqlite3.connect(dest)
-    try:
-        script = dump_path.read_text(encoding="utf-8")
-        conn.executescript(script)
-    finally:
-        conn.close()
+    with closing(sqlite3.connect(dest)) as conn:
+        conn.executescript(dump_path.read_text(encoding="utf-8"))
+        conn.commit()
+        if conn.execute("PRAGMA quick_check").fetchone() != ("ok",):
+            raise RestoreError("SQLite database integrity check failed")
+
+
+def _assert_webui_stopped() -> None:
+    from airpods.configuration import get_config
+
+    service = get_config().services.get("open-webui")
+    if service:
+        inspected = manager.runtime.container_inspect(service.container) or {}
+        state = inspected.get("State") or {}
+        if state.get("Running") is True or state.get("Status") in {
+            "running",
+            "restarting",
+            "paused",
+        }:
+            raise RestoreError(
+                "Stop Open WebUI before restoring its database: airpods stop open-webui (or use --skip-db)"
+            )
 
 
 def _restore_webui_db(root: Path, backup_existing: bool) -> bool:
     raw_db = root / BACKUP_PATHS["webui_db"]
     dump = root / BACKUP_PATHS["webui_dump"]
+    if not raw_db.exists() and not dump.exists():
+        console.print("[info]No Open WebUI database found in backup; skipping[/]")
+        return False
+    _assert_webui_stopped()
     dest = volumes_dir() / WEBUI_VOLUME / "webui.db"
     _ensure_dir(dest.parent)
-    if raw_db.exists():
+    with tempfile.TemporaryDirectory(dir=dest.parent) as staging:
+        candidate = Path(staging) / "webui.db"
+        try:
+            if raw_db.exists():
+                _snapshot_sqlite(raw_db, candidate)
+            else:
+                _hydrate_sqlite_from_dump(dump, candidate)
+        except (sqlite3.Error, OSError) as exc:
+            raise RestoreError(f"Cannot restore database: {exc}") from exc
         if backup_existing:
             _backup_existing_path(dest)
-        shutil.copy2(raw_db, dest)
-        console.print(f"[ok]Open WebUI database restored to {dest}")
-        return True
-    if dump.exists():
-        if backup_existing:
-            _backup_existing_path(dest)
-        _hydrate_sqlite_from_dump(dump, dest)
-        console.print(f"[ok]Open WebUI database reconstructed from SQL dump at {dest}")
-        return True
-    console.print("[info]No Open WebUI database found in backup; skipping[/]")
-    return False
+        _assert_webui_stopped()
+        candidate.replace(dest)
+        for suffix in ("-wal", "-shm"):
+            Path(str(dest) + suffix).unlink(missing_ok=True)
+    console.print(f"[ok]Open WebUI database restored to {dest}")
+    return True
 
 
 def _restore_webui_plugins(root: Path) -> bool:
@@ -447,7 +479,7 @@ def register(app: typer.Typer) -> CommandMap:
         sql_dump: bool = typer.Option(
             True,
             "--sql-dump/--no-sql-dump",
-            help="Include a SQLite .dump of the Open WebUI database (requires running container).",
+            help="Include a SQL dump from the consistent database snapshot.",
         ),
     ) -> None:
         """Create a portable archive containing configs, DBs, and metadata."""
@@ -569,6 +601,11 @@ def register(app: typer.Typer) -> CommandMap:
             root = _extract_archive(archive_path, Path(tmp))
             manifest = _load_manifest(root)
 
+            if not skip_db and (
+                (root / BACKUP_PATHS["webui_db"]).exists()
+                or (root / BACKUP_PATHS["webui_dump"]).exists()
+            ):
+                _assert_webui_stopped()
             if not skip_configs:
                 _restore_configs(root / BACKUP_PATHS["config"], backup_existing)
             if not skip_db:

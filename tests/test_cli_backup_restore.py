@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import tarfile
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -28,7 +29,7 @@ def mock_state_dirs(tmp_path):
 
 @pytest.fixture
 def mock_podman():
-    with patch("airpods.cli.commands.backup.ensure_podman_available"):
+    with patch("airpods.cli.commands.backup.ensure_runtime_available"):
         yield
 
 
@@ -60,7 +61,8 @@ def _create_dummy_backup(home: Path) -> Path:
     backup_root = home / "archive"
     (backup_root / "configs").mkdir(parents=True)
     (backup_root / "webui").mkdir(parents=True)
-    (backup_root / "webui" / "webui.db").write_text("db")
+    with sqlite3.connect(backup_root / "webui" / "webui.db") as db:
+        db.execute("CREATE TABLE example(value TEXT)")
     manifest = backup_root / "manifest.json"
     manifest.write_text(json.dumps({"airpods_version": "test"}), encoding="utf-8")
 
@@ -75,9 +77,10 @@ def test_backup_creates_archive(
 ):
     configs = mock_state_dirs["configs"]
     volumes = mock_state_dirs["volumes"]
-    (configs / "config.toml").write_text("test")
+    (configs / "config.toml").write_text("[cli]\nlog_lines=200\n")
     (volumes / "airpods_webui_data").mkdir()
-    (volumes / "airpods_webui_data" / "webui.db").write_text("db")
+    with sqlite3.connect(volumes / "airpods_webui_data" / "webui.db") as db:
+        db.execute("CREATE TABLE example(value TEXT)")
     (volumes / "webui_plugins").mkdir()
 
     result = runner.invoke(
@@ -107,7 +110,11 @@ def test_restore_missing_archive_errors(runner, mock_podman):
 
 def test_restore_successful(runner, mock_state_dirs, mock_podman):
     archive = _create_dummy_backup(mock_state_dirs["home"])
-    result = runner.invoke(app, ["state", "restore", str(archive), "--skip-models"])
+    with patch(
+        "airpods.cli.commands.backup.manager.runtime.container_inspect",
+        return_value=None,
+    ):
+        result = runner.invoke(app, ["state", "restore", str(archive), "--skip-models"])
 
     assert result.exit_code == 0
     restored_db = mock_state_dirs["volumes"] / "airpods_webui_data" / "webui.db"
