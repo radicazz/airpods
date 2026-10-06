@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Tuple
 from urllib.parse import urlparse, unquote
-from urllib.request import Request, urlopen
+from airpods.files import download_file, managed_path, open_url as urlopen
 
 from airpods import state
 
@@ -27,31 +27,12 @@ def infer_filename(url: str) -> Optional[str]:
 
 
 def download_model(url: str, *, name: Optional[str] = None) -> Tuple[Path, int]:
-    dest_dir = ensure_gguf_models_dir()
+    dest_dir = gguf_models_dir()
     filename = name or infer_filename(url)
     if not filename:
         raise ValueError("Unable to infer filename from URL; use --name")
-
-    dest = dest_dir / filename
+    dest = managed_path(dest_dir, filename)
     if dest.exists():
         raise FileExistsError(f"Model already exists: {dest}")
-
-    req = Request(url, headers={"User-Agent": "airpods/gguf"})
-    tmp_path = dest.with_suffix(dest.suffix + ".partial")
-    bytes_written = 0
-
-    try:
-        with urlopen(req) as resp, tmp_path.open("wb") as handle:
-            while True:
-                chunk = resp.read(1024 * 1024)
-                if not chunk:
-                    break
-                handle.write(chunk)
-                bytes_written += len(chunk)
-    except Exception:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise
-
-    tmp_path.replace(dest)
-    return dest, bytes_written
+    size = download_file(url, dest, opener=urlopen, show_progress=False)
+    return dest, size

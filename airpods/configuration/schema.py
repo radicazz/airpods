@@ -148,7 +148,9 @@ class CustomNodeInstall(BaseModel):
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("custom node name cannot be empty")
-        return cleaned
+        from airpods.files import validate_component
+
+        return validate_component(cleaned)
 
     @field_validator("repo")
     @classmethod
@@ -191,6 +193,14 @@ class CustomNodeInstall(BaseModel):
         if value is None:
             return None
         cleaned = value.strip()
+        if cleaned and (
+            Path(cleaned).is_absolute()
+            or ".." in Path(cleaned).parts
+            or "\\" in cleaned
+        ):
+            raise ValueError(
+                "requirements must be relative to the custom node directory"
+            )
         return cleaned or None
 
     @model_validator(mode="after")

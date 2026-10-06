@@ -10,6 +10,7 @@ from typing import Iterable
 
 from airpods.configuration import get_config
 from airpods.configuration.schema import CustomNodeInstall
+from airpods.files import managed_path
 from airpods.logging import console
 from airpods.plugins import get_comfyui_plugins_target_dir
 
@@ -78,7 +79,7 @@ def node_destination(
 ) -> Path:
     """Resolve the on-disk destination path for a custom node."""
     root = target_root or custom_nodes_target_dir()
-    dest = root / node.name
+    dest = managed_path(root, node.name)
 
     if node.path:
         source = Path(node.path)
@@ -87,7 +88,7 @@ def node_destination(
             if dest.suffix != suffix:
                 dest = dest.with_suffix(suffix)
 
-    return dest
+    return managed_path(root, dest.name)
 
 
 def custom_nodes_keep_entries(nodes: Iterable[CustomNodeInstall]) -> set[str]:
@@ -236,9 +237,7 @@ def collect_requirements(
         if node.path and Path(node.path).is_file():
             continue
 
-        host_req = Path(req)
-        if not host_req.is_absolute():
-            host_req = (target_root / node.name / host_req).resolve()
+        host_req = managed_path(managed_path(target_root, node.name), req)
 
         if not host_req.exists():
             console.print(

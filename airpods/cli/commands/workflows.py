@@ -6,25 +6,18 @@ import json
 import difflib
 import re
 import shutil
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from airpods.files import (
+    DownloadError,
+    download_file,
+    managed_path,
+    open_url as urlopen,
+)
 
 import typer
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TransferSpeedColumn,
-)
 from rich.table import Table
 
 from airpods import config as config_module
@@ -92,10 +85,6 @@ class ModelRef:
     subdir: str | None = None
     url: str | None = None
     source: str | None = None
-
-
-class DownloadError(RuntimeError):
-    pass
 
 
 def _coerce_filename(value: str) -> str | None:
@@ -511,82 +500,25 @@ def _download_to_path(
     timeout_s: int = 300,
     retries: int = 2,
 ) -> None:
-    if dest.exists() and not overwrite:
-        return
-    if timeout_s <= 0:
-        raise typer.BadParameter("--timeout must be > 0")
-    if retries < 0:
-        raise typer.BadParameter("--retries must be >= 0")
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        download_file(
+            _normalize_hf_url(url),
+            dest,
+            hf_token=hf_token,
+            overwrite=overwrite,
+            timeout_s=timeout_s,
+            retries=retries,
+            opener=urlopen,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
-    url = _normalize_hf_url(url)
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise typer.BadParameter("only http(s) urls are supported")
 
-    headers = {"User-Agent": "airpods-workflows/0.1"}
-    if hf_token:
-        headers["Authorization"] = f"Bearer {hf_token}"
-
-    req = Request(url, headers=headers, method="GET")
-    tmp = dest.with_suffix(dest.suffix + ".part")
-
-    last_err: str | None = None
-    attempts_total = retries + 1
-    for attempt in range(1, attempts_total + 1):
-        try:
-            with urlopen(req, timeout=float(timeout_s)) as resp:
-                total = resp.headers.get("Content-Length")
-                total_int = int(total) if total and total.isdigit() else None
-
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    TaskProgressColumn(),
-                    DownloadColumn(),
-                    TransferSpeedColumn(),
-                    TimeElapsedColumn(),
-                    console=console,
-                ) as progress:
-                    task = progress.add_task(
-                        f"Downloading {dest.name}", total=total_int or 0
-                    )
-                    with tmp.open("wb") as f:
-                        while True:
-                            chunk = resp.read(1024 * 256)
-                            if not chunk:
-                                break
-                            f.write(chunk)
-                            progress.update(task, advance=len(chunk))
-                    progress.update(
-                        task, completed=total_int or progress.tasks[0].completed
-                    )
-
-            tmp.replace(dest)
-            return
-        except HTTPError as exc:
-            last_err = f"http {exc.code}: {exc.reason}"
-        except URLError as exc:
-            last_err = str(getattr(exc, "reason", exc)) or str(exc)
-        except TimeoutError as exc:
-            last_err = str(exc) or "timed out"
-        except OSError as exc:
-            last_err = str(exc) or "os error"
-        finally:
-            try:
-                if tmp.exists():
-                    tmp.unlink()
-            except OSError:
-                pass
-
-        if attempt < attempts_total:
-            console.print(
-                f"[warn]Download failed (attempt {attempt}/{attempts_total}): {last_err}[/]"
-            )
-            time.sleep(min(15.0, attempt * 1.5))
-
-    raise DownloadError(last_err or "download failed")
+def _model_destination(root: Path, folder: str, subdir: str, filename: str) -> Path:
+    try:
+        return managed_path(root, folder, subdir, filename)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 def _list_model_folders(models_root: Path) -> list[str]:
@@ -801,7 +733,6 @@ def list_cmd(
                         missing_refs.append(ref)
 
             total = len(refs)
-            synced = total - missing_count
 
             mapping_dict: dict[str, dict[str, str]] = {}
             mapping_path = path.with_suffix(".toml")
@@ -1192,7 +1123,7 @@ def sync_cmd(
         url = (entry or {}).get("url") or ref.url or ""
 
         if folder:
-            candidate = models_root / folder / subdir / filename
+            candidate = _model_destination(models_root, folder, subdir, filename)
             if candidate.exists():
                 continue
             missing.append((ref, candidate, folder, url))
@@ -1274,7 +1205,7 @@ def sync_cmd(
             enriched[ref.filename] = entry
 
             new_dest = (
-                models_root / selected_folder / subdir / ref.filename
+                _model_destination(models_root, selected_folder, subdir, ref.filename)
                 if selected_folder
                 else dest
             )
@@ -1303,7 +1234,7 @@ def sync_cmd(
             )
             return
         console.print(
-            f"[warn]No models can be downloaded without URLs. "
+            "[warn]No models can be downloaded without URLs. "
             "Add them to --map and re-run.[/]"
         )
         return
@@ -1442,7 +1373,7 @@ def desync_cmd(
         filename = (entry or {}).get("filename") or ref.filename
 
         if folder:
-            candidate = models_root / folder / subdir / filename
+            candidate = _model_destination(models_root, folder, subdir, filename)
             if candidate.exists() and candidate.is_file():
                 try:
                     targets[candidate.resolve()] = ref.filename
@@ -1602,7 +1533,7 @@ def pull_cmd(
     name = filename or Path(urlparse(url).path).name
     if not name:
         raise typer.BadParameter("unable to infer filename from URL; pass --name")
-    dest = models_root / folder / subdir / Path(name).name
+    dest = _model_destination(models_root, folder, subdir, name)
     console.print(f"[info]Saving to: [accent]{dest}[/]")
     try:
         _download_to_path(
