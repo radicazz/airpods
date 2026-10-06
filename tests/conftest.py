@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import pytest
 from typer.testing import CliRunner
 
@@ -19,7 +21,7 @@ def isolate_config(tmp_path, monkeypatch):
     # since runtime operations are mocked in tests
     from airpods.configuration import defaults
 
-    original_config = defaults.DEFAULT_CONFIG_DICT.copy()
+    original_config = copy.deepcopy(defaults.DEFAULT_CONFIG_DICT)
     defaults.DEFAULT_CONFIG_DICT["dependencies"]["skip_checks"] = True
 
     state.clear_state_root_override()
@@ -30,6 +32,15 @@ def isolate_config(tmp_path, monkeypatch):
     # Restore original config after test
     defaults.DEFAULT_CONFIG_DICT.clear()
     defaults.DEFAULT_CONFIG_DICT.update(original_config)
+    state.clear_state_root_override()
+    locate_config_file.cache_clear()
+    import airpods.cli.common as common
+    import airpods.config as service_config
+    import airpods.configuration.loader as loader
+
+    common._MANAGER = None
+    service_config._REGISTRY = None
+    loader._CONFIG_INSTANCE = None
 
 
 @pytest.fixture

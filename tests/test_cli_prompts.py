@@ -8,7 +8,7 @@ from airpods.cli import app
 @patch("airpods.cli.commands.stop.ui.confirm_action")
 @patch("airpods.cli.commands.stop.manager")
 @patch("airpods.cli.commands.stop.resolve_services")
-@patch("airpods.cli.commands.stop.ensure_podman_available")
+@patch("airpods.cli.commands.stop.ensure_runtime_available")
 def test_stop_remove_cancelled_when_confirmation_declined(
     mock_ensure,
     mock_resolve,
@@ -33,7 +33,7 @@ def test_stop_remove_cancelled_when_confirmation_declined(
 
 @patch("airpods.cli.commands.stop.manager")
 @patch("airpods.cli.commands.stop.resolve_services")
-@patch("airpods.cli.commands.stop.ensure_podman_available")
+@patch("airpods.cli.commands.stop.ensure_runtime_available")
 def test_stop_reports_only_running_services(
     mock_ensure,
     mock_resolve,

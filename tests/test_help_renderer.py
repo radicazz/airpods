@@ -19,41 +19,14 @@ def test_command_description_falls_back_to_docstring():
     assert cli_help._command_description(command) == "Docstring first line."
 
 
-def test_check_service_availability_any_with_running_services():
-    """Test that 'any' returns available when services are running."""
-    mock_rows = {
-        "ollama-pod": {"Status": "Running"},
-    }
-    with patch.object(cli_common.manager, "pod_status_rows", return_value=mock_rows):
-        is_available, reason = cli_common.check_service_availability("any")
-        assert is_available is True
-        assert reason == ""
+def test_help_never_probes_runtime(runner):
+    from airpods.cli import app
 
-
-def test_check_service_availability_any_with_no_running_services():
-    """Test that 'any' returns unavailable when no services are running."""
-    mock_rows = {
-        "ollama-pod": {"Status": "Exited"},
-    }
-    with patch.object(cli_common.manager, "pod_status_rows", return_value=mock_rows):
-        is_available, reason = cli_common.check_service_availability("any")
-        assert is_available is False
-        assert reason == "no services running"
-
-
-def test_check_service_availability_any_with_empty_pods():
-    """Test that 'any' returns unavailable when no pods exist."""
-    with patch.object(cli_common.manager, "pod_status_rows", return_value={}):
-        is_available, reason = cli_common.check_service_availability("any")
-        assert is_available is False
-        assert reason == "no services running"
-
-
-def test_check_service_availability_any_with_exception():
-    """Test that 'any' returns unavailable on exception."""
     with patch.object(
-        cli_common.manager, "pod_status_rows", side_effect=Exception("Test error")
+        cli_common, "_apply_cli_config", side_effect=AssertionError("runtime probe")
     ):
-        is_available, reason = cli_common.check_service_availability("any")
-        assert is_available is False
-        assert reason == "no services running"
+        result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    for command in ("status", "logs", "stop"):
+        assert command in result.stdout
+    assert "Unavailable" not in result.stdout

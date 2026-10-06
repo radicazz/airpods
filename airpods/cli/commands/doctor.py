@@ -19,8 +19,6 @@ from airpods.updates import (
     is_update_available,
 )
 from airpods.cuda import select_cuda_version, get_cuda_info_display
-from airpods.paths import detect_repo_root
-from airpods.state import state_root
 
 from ..common import COMMAND_CONTEXT, DOCTOR_REMEDIATIONS, manager
 from ..help import command_help_option, maybe_show_command_help

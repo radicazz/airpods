@@ -36,12 +36,12 @@ def _resolve_and_register(path: Path) -> Path:
 
 
 @lru_cache(maxsize=1)
-def locate_config_file() -> Optional[Path]:
+def locate_config_file(*, allow_missing: bool = False) -> Optional[Path]:
     """Locate the configuration file using the documented priority order."""
     env_override = os.environ.get("AIRPODS_CONFIG")
     if env_override:
         path = Path(env_override).expanduser()
-        if not path.exists():
+        if not path.exists() and not allow_missing:
             raise ConfigurationError(f"AIRPODS_CONFIG points to missing file: {path}")
         return _resolve_and_register(path)
 
@@ -136,7 +136,6 @@ def load_config() -> AirpodsConfig:
         config = AirpodsConfig.from_dict(config_data)
     except ValueError as exc:
         raise ConfigurationError(f"Invalid configuration: {exc}") from exc
-    config = _apply_runtime_defaults(config)
     config = resolve_templates(config)
     return config
 
@@ -158,7 +157,3 @@ def reload_config() -> AirpodsConfig:
     locate_config_file.cache_clear()
     _CONFIG_INSTANCE = load_config()
     return _CONFIG_INSTANCE
-
-
-def _apply_runtime_defaults(config: AirpodsConfig) -> AirpodsConfig:
-    return config

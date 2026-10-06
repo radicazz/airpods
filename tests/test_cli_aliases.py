@@ -6,7 +6,7 @@ from airpods.cli import app
 
 
 @patch("airpods.cli.commands.start.resolve_services")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.manager")
 @patch("airpods.cli.commands.start.detect_gpu")
 def test_up_alias(mock_detect_gpu, mock_manager, mock_ensure, mock_resolve, runner):
@@ -23,7 +23,7 @@ def test_up_alias(mock_detect_gpu, mock_manager, mock_ensure, mock_resolve, runn
 
 
 @patch("airpods.cli.commands.start.resolve_services")
-@patch("airpods.cli.commands.start.ensure_podman_available")
+@patch("airpods.cli.commands.start.ensure_runtime_available")
 @patch("airpods.cli.commands.start.manager")
 @patch("airpods.cli.commands.start.detect_gpu")
 def test_run_alias(mock_detect_gpu, mock_manager, mock_ensure, mock_resolve, runner):
@@ -40,7 +40,7 @@ def test_run_alias(mock_detect_gpu, mock_manager, mock_ensure, mock_resolve, run
 
 
 @patch("airpods.cli.commands.stop.resolve_services")
-@patch("airpods.cli.commands.stop.ensure_podman_available")
+@patch("airpods.cli.commands.stop.ensure_runtime_available")
 @patch("airpods.cli.commands.stop.manager")
 def test_down_alias(mock_manager, mock_ensure, mock_resolve, runner):
     """'down' aliases stop."""
@@ -53,7 +53,7 @@ def test_down_alias(mock_manager, mock_ensure, mock_resolve, runner):
 
 
 @patch("airpods.cli.commands.status.render_status")
-@patch("airpods.cli.commands.status.ensure_podman_available")
+@patch("airpods.cli.commands.status.ensure_runtime_available")
 @patch("airpods.cli.commands.status.resolve_services")
 def test_ps_alias(mock_resolve, mock_ensure, mock_render, runner):
     """'ps' aliases status."""
@@ -66,7 +66,7 @@ def test_ps_alias(mock_resolve, mock_ensure, mock_render, runner):
 
 
 @patch("airpods.cli.commands.status.render_status")
-@patch("airpods.cli.commands.status.ensure_podman_available")
+@patch("airpods.cli.commands.status.ensure_runtime_available")
 @patch("airpods.cli.commands.status.resolve_services")
 def test_info_alias(mock_resolve, mock_ensure, mock_render, runner):
     """'info' aliases status."""

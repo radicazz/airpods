@@ -8,6 +8,7 @@ import typer
 from airpods import __description__
 from airpods.logging import console
 from airpods.runtime import ContainerRuntimeError
+from airpods.configuration import ConfigurationError
 
 from .commands import register as register_commands
 from .command_classes import AirpodsGroup
@@ -16,7 +17,6 @@ from .common import (
     DEFAULT_PING_TIMEOUT,
     DEFAULT_STOP_TIMEOUT,
     ensure_runtime_available,
-    get_cli_config,
     manager as _manager,
     print_version,
     resolve_services,
@@ -46,7 +46,7 @@ def _root_command(
         is_eager=True,
     ),
     verbose: bool = typer.Option(
-        get_cli_config().verbose,
+        False,
         "-V",
         "--verbose",
         help="Show detailed output and progress information.",
@@ -76,7 +76,7 @@ def _root_command(
 def main() -> None:
     try:
         app()
-    except ContainerRuntimeError as exc:
+    except (ContainerRuntimeError, ConfigurationError) as exc:
         console.print(f"[error]{exc}[/]")
         sys.exit(1)
 

@@ -11,7 +11,7 @@ from airpods.logging import console
 
 from ..common import (
     COMMAND_CONTEXT,
-    DEFAULT_STOP_TIMEOUT,
+    get_cli_config,
     ensure_runtime_available,
     is_verbose_mode,
     manager,
@@ -20,8 +20,6 @@ from ..common import (
 from ..completions import service_name_completion
 from ..help import command_help_option, maybe_show_command_help
 from ..type_defs import CommandMap
-
-ensure_podman_available = ensure_runtime_available
 
 
 def register(app: typer.Typer) -> CommandMap:
@@ -38,12 +36,15 @@ def register(app: typer.Typer) -> CommandMap:
         remove: bool = typer.Option(
             False, "--remove", "-r", help="Remove pods after stopping."
         ),
-        timeout: int = typer.Option(
-            DEFAULT_STOP_TIMEOUT, "--timeout", "-t", help="Stop timeout seconds."
+        timeout: Optional[int] = typer.Option(
+            None, "--timeout", "-t", help="Stop timeout seconds."
         ),
     ) -> None:
         """Stop pods for specified services; confirms before destructive removal."""
         maybe_show_command_help(ctx, help_)
+        timeout = timeout if timeout is not None else get_cli_config().stop_timeout
+        if timeout <= 0:
+            raise typer.BadParameter("stop timeout must be positive")
         specs = resolve_services(service)
         ensure_runtime_available()
 

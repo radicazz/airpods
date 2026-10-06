@@ -345,11 +345,24 @@ def load_service_specs(
     return specs
 
 
-REGISTRY = ServiceRegistry(load_service_specs())
+_REGISTRY: ServiceRegistry | None = None
+
+
+class _RegistryProxy:
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        global _REGISTRY
+        if _REGISTRY is None:
+            _REGISTRY = ServiceRegistry(load_service_specs())
+        return getattr(_REGISTRY, name)
+
+
+REGISTRY = _RegistryProxy()
 
 
 def reload_registry(config: Optional[AirpodsConfig] = None) -> ServiceRegistry:
     """Rebuild the service registry from the latest configuration."""
-    global REGISTRY
-    REGISTRY = ServiceRegistry(load_service_specs(config))
-    return REGISTRY
+    global _REGISTRY
+    _REGISTRY = ServiceRegistry(load_service_specs(config))
+    return _REGISTRY

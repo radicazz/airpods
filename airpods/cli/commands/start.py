@@ -35,8 +35,6 @@ from ..type_defs import CommandMap
 from .. import pull as _pull
 import airpods.launch as _launch
 
-ensure_podman_available = ensure_runtime_available
-
 
 def register(app: typer.Typer) -> CommandMap:
     @app.command(context_settings=COMMAND_CONTEXT)

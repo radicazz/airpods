@@ -75,7 +75,7 @@ def resolve_volume_path(relative: Union[str, os.PathLike[str]]) -> Path:
         raise ValueError("volume path cannot be empty")
     if path.is_absolute():
         return path
-    base = volumes_dir().resolve()
+    base = (state_root() / "volumes").resolve()
     resolved = (base / path).resolve()
     try:
         resolved.relative_to(base)

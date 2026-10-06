@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import shlex
 from collections.abc import MutableMapping
 from datetime import datetime
 from pathlib import Path
@@ -102,7 +103,7 @@ def register(app: typer.Typer) -> CommandMap:
             raise typer.Exit(code=1)
 
         if format == "toml":
-            config_path = locate_config_file()
+            config_path = locate_config_file(allow_missing=True)
             if config_path and config_path.exists():
                 content = config_path.read_text()
             else:
@@ -120,13 +121,13 @@ def register(app: typer.Typer) -> CommandMap:
     ) -> None:
         """Show configuration file location."""
         maybe_show_command_help(ctx, help_)
-        config_path = locate_config_file()
+        config_path = locate_config_file(allow_missing=True)
         if config_path:
             console.print(f"[ok]Config file: {config_path}[/]")
             console.print(f"[info]Exists: {config_path.exists()}[/]")
         else:
             console.print("[warn]No config file found (using defaults)[/]")
-            console.print(f"[info]Create one with: airpods config init[/]")
+            console.print("[info]Create one with: airpods config init[/]")
             console.print(f"[info]Default location: {_default_config_path()}[/]")
 
     @config_app.command(context_settings=COMMAND_CONTEXT)
@@ -136,18 +137,18 @@ def register(app: typer.Typer) -> CommandMap:
     ) -> None:
         """Open configuration file in $EDITOR."""
         maybe_show_command_help(ctx, help_)
-        config_path = locate_config_file()
-        if not config_path:
+        config_path = locate_config_file(allow_missing=True)
+        if not config_path or not config_path.exists():
             console.print("[warn]No config file exists yet[/]")
             if not ui.confirm_action("Create default config file now?"):
                 raise typer.Exit(code=1)
-            config_path = _default_config_path()
+            config_path = config_path or _default_config_path()
             config_path.parent.mkdir(parents=True, exist_ok=True)
             config_path.write_text(_generate_default_toml(), encoding="utf-8")
 
         editor = os.environ.get("EDITOR", "nano")
         try:
-            subprocess.run([editor, str(config_path)], check=True)
+            subprocess.run([*shlex.split(editor), str(config_path)], check=True)
             console.print("[ok]Config updated[/]")
             console.print("[info]Changes will apply on the next command invocation.[/]")
         except subprocess.CalledProcessError:
@@ -167,7 +168,7 @@ def register(app: typer.Typer) -> CommandMap:
         try:
             config = reload_config()
         except ConfigurationError as exc:
-            console.print(f"[error]Configuration is invalid:[/]")
+            console.print("[error]Configuration is invalid:[/]")
             console.print(f"[error]{exc}[/]")
             raise typer.Exit(code=1)
 
@@ -184,8 +185,8 @@ def register(app: typer.Typer) -> CommandMap:
     ) -> None:
         """Reset configuration to defaults."""
         maybe_show_command_help(ctx, help_)
-        config_path = locate_config_file()
-        if not config_path:
+        config_path = locate_config_file(allow_missing=True)
+        if not config_path or not config_path.exists():
             console.print("[warn]No config file to reset[/]")
             raise typer.Exit()
 
@@ -283,7 +284,9 @@ def register(app: typer.Typer) -> CommandMap:
         candidate = tomllib.loads(tomlkit.dumps(document))
         merged = merge_configs(DEFAULT_CONFIG_DICT, candidate)
         try:
-            AirpodsConfig.from_dict(merged)
+            from airpods.configuration.resolver import resolve_templates
+
+            resolve_templates(AirpodsConfig.from_dict(merged))
         except Exception as exc:
             console.print(f"[error]Invalid value for {key}: {exc}[/]")
             console.print("[info]No changes were saved.[/]")
@@ -309,9 +312,10 @@ def register(app: typer.Typer) -> CommandMap:
 
 
 def _default_config_path() -> Path:
-    from airpods.state import configs_dir
-
-    return configs_dir() / "config.toml"
+    return (
+        locate_config_file(allow_missing=True)
+        or state_root() / "configs" / "config.toml"
+    )
 
 
 def _generate_default_toml() -> str:

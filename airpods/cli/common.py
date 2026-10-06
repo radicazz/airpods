@@ -26,17 +26,25 @@ HELP_OPTION_NAMES = ("-h", "--help")
 COMMAND_CONTEXT = {"help_option_names": []}
 
 _MANAGER: ServiceManager | None = None
-_CONFIG = get_config()
+_CONFIG = None
+_DEFAULTS = CLIConfig()
+DEFAULT_STOP_TIMEOUT = _DEFAULTS.stop_timeout
+DEFAULT_LOG_LINES = _DEFAULTS.log_lines
+DEFAULT_PING_TIMEOUT = _DEFAULTS.ping_timeout
+DEFAULT_STARTUP_TIMEOUT = _DEFAULTS.startup_timeout
+DEFAULT_STARTUP_CHECK_INTERVAL = _DEFAULTS.startup_check_interval
 
 
 def get_cli_config() -> CLIConfig:
-    return _CONFIG.cli
+    return get_config().cli
 
 
 class _ManagerProxy:
     def __getattr__(self, name: str) -> object:
-        if _MANAGER is None:  # pragma: no cover - defensive guard
-            raise AttributeError("manager is not initialized yet")
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if _MANAGER is None:
+            _apply_cli_config(get_config())
         return getattr(_MANAGER, name)
 
 
@@ -49,7 +57,10 @@ def _apply_cli_config(config) -> None:
     global DEFAULT_STARTUP_CHECK_INTERVAL, _MANAGER
 
     _CONFIG = config
-    _RUNTIME = get_runtime(_CONFIG.runtime.prefer)
+    pod_containers: dict[str, list[str]] = {}
+    for service in _CONFIG.services.values():
+        pod_containers.setdefault(service.pod, []).append(service.container)
+    _RUNTIME = get_runtime(_CONFIG.runtime.prefer, pod_containers=pod_containers)
 
     DEFAULT_STOP_TIMEOUT = _CONFIG.cli.stop_timeout
     DEFAULT_LOG_LINES = _CONFIG.cli.log_lines
@@ -78,13 +89,9 @@ def _apply_cli_config(config) -> None:
     )
 
 
-_apply_cli_config(get_config())
-
 DOCTOR_REMEDIATIONS = {
     "podman": "Install Podman: https://podman.io/docs/installation",
-    "podman-compose": "Install podman-compose (often via your package manager).",
     "docker": "Install Docker: https://docs.docker.com/get-docker/",
-    "docker-compose": "Install Docker Compose: https://docs.docker.com/compose/install/",
     "uv": "Install uv: https://github.com/astral-sh/uv",
 }
 
@@ -123,7 +130,9 @@ def refresh_cli_context() -> None:
     """Reload configuration, service registry, and derived CLI defaults."""
     config = reload_config()
     config_module.reload_registry(config)
-    _apply_cli_config(config)
+    global _CONFIG, _MANAGER
+    _CONFIG = config
+    _MANAGER = None
 
 
 def resolve_services(names: Optional[list[str]]) -> list[ServiceSpec]:
@@ -142,7 +151,7 @@ def resolve_services(names: Optional[list[str]]) -> list[ServiceSpec]:
         disabled = [
             name
             for name in normalized
-            if name in _CONFIG.services and not _CONFIG.services[name].enabled
+            if name in get_config().services and not get_config().services[name].enabled
         ]
         if disabled:
             if len(disabled) == 1:
@@ -179,18 +188,6 @@ def print_version() -> None:
     console.print(f"[bold]airpods[/bold] [accent]v{__version__}[/]")
 
 
-def print_network_status(
-    created: bool, network_name: str, verbose: bool = True
-) -> None:
-    """Display network creation or reuse status, respecting verbose mode."""
-    if not verbose:
-        return
-    if created:
-        console.print(f"Network [accent]{network_name}[/]: [ok]✓ created[/]")
-    else:
-        console.print(f"Network [accent]{network_name}[/]: [ok]✓ exists[/]")
-
-
 def print_volume_status(
     results: list[VolumeEnsureResult], verbose: bool = True
 ) -> None:
@@ -222,7 +219,7 @@ def print_config_info(config_path: str | None, verbose: bool = True) -> None:
 
 def is_verbose_mode(ctx: typer.Context) -> bool:
     """Check if verbose mode is enabled from context."""
-    return ctx.obj and ctx.obj.get("verbose", False)
+    return bool((ctx.obj or {}).get("verbose", False) or get_cli_config().verbose)
 
 
 _SIZE_PATTERN = re.compile(
@@ -281,50 +278,3 @@ def get_ollama_port() -> int:
     if spec and spec.ports:
         return spec.ports[0][0]
     return OLLAMA_DEFAULT_PORT
-
-
-def check_service_availability(service_name: str) -> tuple[bool, str]:
-    """
-    Check if a service is enabled in config and currently running.
-
-    Args:
-        service_name: Name of the service to check (e.g., "ollama")
-                     Special value "any" checks if any services are running
-
-    Returns:
-        Tuple of (is_available, reason_if_not)
-        - (True, "") if service is available
-        - (False, "reason") if service is not available
-    """
-    # Handle special "any" case - check if any services are running
-    if service_name == "any":
-        try:
-            pod_rows = manager.pod_status_rows() or {}
-            # Check if any pod is running
-            for row in pod_rows.values():
-                if row.get("Status", "") == "Running":
-                    return True, ""
-            return False, "no services running"
-        except Exception:
-            return False, "no services running"
-
-    # Check if service is in the registry (enabled in config)
-    spec = config_module.REGISTRY.get(service_name)
-    if not spec:
-        return False, f"{service_name} service not enabled"
-
-    # Check if the pod is actually running
-    try:
-        pod_rows = manager.pod_status_rows() or {}
-        row = pod_rows.get(spec.pod)
-        if not row:
-            return False, f"{service_name} service not running"
-
-        status = row.get("Status", "")
-        if status != "Running":
-            return False, f"{service_name} service not running"
-
-        return True, ""
-    except Exception:
-        # If we can't check status, assume not available
-        return False, f"{service_name} service status unknown"

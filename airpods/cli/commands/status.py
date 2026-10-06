@@ -21,8 +21,6 @@ from ..help import command_help_option, maybe_show_command_help
 from ..status_view import render_status
 from ..type_defs import CommandMap
 
-ensure_podman_available = ensure_runtime_available
-
 
 def register(app: typer.Typer) -> CommandMap:
     @app.command(context_settings=COMMAND_CONTEXT)

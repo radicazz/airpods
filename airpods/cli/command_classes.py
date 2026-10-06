@@ -12,6 +12,10 @@ import typer
 from typer import rich_utils
 from typer.core import DEFAULT_MARKUP_MODE, MarkupMode, rich
 
+from airpods.runtime import ContainerRuntimeError
+from .commands.backup import BackupError, RestoreError
+from airpods.configuration import ConfigurationError
+
 from .common import HELP_OPTION_NAMES
 from .help import render_usage_error, show_help_for_context
 
@@ -82,31 +86,22 @@ def _airpods_main(
     try:
         try:
             with self.make_context(prog_name, args, **extra) as ctx:
-                # Check if the command being invoked requires a service that's not available
-                from airpods.cli.help import COMMAND_DEPENDENCIES
-                from airpods.cli.common import check_service_availability
-
-                # Reconstruct the full command path (e.g., "models list")
-                full_command_path = ctx.command_path
-                if full_command_path in COMMAND_DEPENDENCIES:
-                    service_name = COMMAND_DEPENDENCIES[full_command_path]
-                    is_available, reason = check_service_availability(service_name)
-
-                    if not is_available:
-                        from airpods.logging import console
-
-                        console.print(
-                            f"[error]Error:[/] Command '{full_command_path}' is currently disabled."
-                        )
-                        console.print(
-                            f"[info]{reason.capitalize()}. Start it with 'airpods start {service_name}'[/]"
-                        )
-                        sys.exit(1)
-
                 rv = self.invoke(ctx)
                 if not standalone_mode:
                     return rv
                 ctx.exit()
+        except (
+            ContainerRuntimeError,
+            ConfigurationError,
+            BackupError,
+            RestoreError,
+        ) as exc:
+            from airpods.logging import console
+
+            console.print(f"[error]{exc}[/]")
+            if not standalone_mode:
+                raise
+            sys.exit(1)
         except (EOFError, KeyboardInterrupt) as exc:
             click.echo(file=sys.stderr)
             raise click.Abort() from exc

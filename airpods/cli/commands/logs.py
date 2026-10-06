@@ -11,7 +11,7 @@ from airpods.logging import console
 
 from ..common import (
     COMMAND_CONTEXT,
-    DEFAULT_LOG_LINES,
+    get_cli_config,
     ensure_runtime_available,
     manager,
     resolve_services,
@@ -36,12 +36,15 @@ def register(app: typer.Typer) -> CommandMap:
         since: Optional[str] = typer.Option(
             None, "--since", help="Show logs since RFC3339 timestamp or duration."
         ),
-        lines: int = typer.Option(
-            DEFAULT_LOG_LINES, "--lines", "-n", help="Number of log lines to show."
+        lines: Optional[int] = typer.Option(
+            None, "--lines", "-n", help="Number of log lines to show."
         ),
     ) -> None:
         """Show pod logs."""
         maybe_show_command_help(ctx, help_)
+        lines = lines if lines is not None else get_cli_config().log_lines
+        if lines <= 0:
+            raise typer.BadParameter("log lines must be positive")
         specs = resolve_services(service)
         ensure_runtime_available()
         if follow and len(specs) > 1:

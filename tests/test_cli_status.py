@@ -6,7 +6,7 @@ from airpods.cli import app
 
 
 @patch("airpods.cli.commands.status.render_status")
-@patch("airpods.cli.commands.status.ensure_podman_available")
+@patch("airpods.cli.commands.status.ensure_runtime_available")
 @patch("airpods.cli.commands.status.resolve_services")
 def test_status_watch_handles_interrupt(mock_resolve, mock_ensure, mock_render, runner):
     mock_resolve.return_value = [MagicMock()]
@@ -19,7 +19,7 @@ def test_status_watch_handles_interrupt(mock_resolve, mock_ensure, mock_render, 
     mock_render.assert_called()
 
 
-@patch("airpods.cli.commands.status.ensure_podman_available")
+@patch("airpods.cli.commands.status.ensure_runtime_available")
 @patch("airpods.cli.commands.status.resolve_services")
 def test_status_invalid_watch_value(mock_resolve, mock_ensure, runner):
     mock_resolve.return_value = []
