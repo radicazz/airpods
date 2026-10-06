@@ -16,7 +16,6 @@ from typing import (
     Tuple,
 )
 
-from airpods import gpu as gpu_utils
 from airpods import state
 from airpods.runtime import ContainerRuntime, ContainerRuntimeError
 from airpods.system import CheckResult, check_dependency, detect_gpu
@@ -152,7 +151,9 @@ class ServiceManager:
         self.restart_policy = restart_policy
         self.gpu_device_flag = gpu_device_flag
         self.required_dependencies = list(
-            required_dependencies or ["podman", "podman-compose", "uv"]
+            required_dependencies
+            if required_dependencies is not None
+            else [runtime.runtime_name, "uv"]
         )
         self.optional_dependencies = list(optional_dependencies or [])
         self.skip_dependency_checks = skip_dependency_checks

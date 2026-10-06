@@ -7,9 +7,7 @@ from typing import Dict, Literal, Optional, Tuple
 import os
 
 from airpods.cuda import (
-    CUDA_COMPATIBILITY_MAP,
     DEFAULT_CUDA_VERSION,
-    select_cuda_version,
 )
 
 

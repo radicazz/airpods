@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import uuid
 from typing import Any, Callable, Optional
 
@@ -194,31 +193,7 @@ def get_storage_usage(models: list[dict[str, Any]]) -> int:
     return sum(model.get("size", 0) for model in models)
 
 
-def format_size(size_bytes: int) -> str:
-    """
-    Format bytes into human-readable size.
-
-    Args:
-        size_bytes: Size in bytes
-
-    Returns:
-        Formatted string (e.g., "2.3 GB", "150 MB")
-    """
-    if size_bytes == 0:
-        return "0 B"
-
-    units = ["B", "KB", "MB", "GB", "TB"]
-    unit_index = 0
-    size = float(size_bytes)
-
-    while size >= 1024.0 and unit_index < len(units) - 1:
-        size /= 1024.0
-        unit_index += 1
-
-    if unit_index == 0:
-        return f"{int(size)} {units[unit_index]}"
-    else:
-        return f"{size:.1f} {units[unit_index]}"
+from airpods.sizes import format_bytes as format_size  # noqa: F401 - legacy public export
 
 
 def format_time_ago(timestamp_str: str) -> str:

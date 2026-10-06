@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/github/v/release/radicazz/airpods?color=blue)](https://github.com/radicazz/airpods/releases) [![Tests](https://github.com/radicazz/airpods/actions/workflows/test.yml/badge.svg)](https://github.com/radicazz/airpods/actions/workflows/test.yml) [![Coverage](https://codecov.io/gh/radicazz/airpods/graph/badge.svg)](https://codecov.io/gh/radicazz/airpods)
 
-Effortlessly orchestrate *free & open-source* AI services from the command-line.
+Effortlessly orchestrate _free & open-source_ AI services from the command-line.
 
 ## Features
 
@@ -19,7 +19,7 @@ The following services are currently supported:
 
 - [Ollama](https://github.com/ollama/ollama) - Language & Vision models for text, coding, tolling and more.
 - [Llama](https://github.com/ggml-org/llama.cpp) - Lightweight C/C++ LLM inference with GGUF model support.
-- [Open WebUI](https://github.com/open-webui/open-webui)  -  Feature-packed front-end chat with multi-model support.
+- [Open WebUI](https://github.com/open-webui/open-webui) - Feature-packed front-end chat with multi-model support.
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI) - Mature node-based UI for image generation workflows.
 
 ## Example
@@ -43,8 +43,8 @@ Run `airpods --help` for all available commands and options.
 
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/): Install, upgrade & manage `airpods`
 - Container Runtime (one of the following):
-  - `podman` + `podman-compose` (recommended)
-  - `docker` + `docker-compose`
+  - `podman` (recommended)
+  - `docker`
 
 > [!NOTE]
 > AirPods automatically detects which container runtime is available. If both are installed, Podman is preferred by default. You can explicitly choose a runtime by setting `runtime.prefer` in your config file.

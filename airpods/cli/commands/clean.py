@@ -20,7 +20,6 @@ from airpods.state import configs_dir, volumes_dir
 from airpods import config as config_module
 from ..common import (
     COMMAND_CONTEXT,
-    DEFAULT_STOP_TIMEOUT,
     SERVICE_NAME_ALIASES,
     ensure_runtime_available,
     get_cli_config,
@@ -29,8 +28,6 @@ from ..common import (
 from ..completions import service_name_completion
 from ..help import command_help_option, maybe_show_command_help, exit_with_help
 from ..type_defs import CommandMap
-
-ensure_podman_available = ensure_runtime_available
 
 
 class CleanupPlan:
@@ -81,27 +78,10 @@ def _get_dir_size(path: Path) -> int:
     return total
 
 
-def _parse_image_size(size_str: str) -> int:
-    """Parse podman image size string to bytes."""
-    try:
-        size_str = size_str.strip().upper()
-        multipliers = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
-        for unit, mult in multipliers.items():
-            if size_str.endswith(unit):
-                num = float(size_str[: -len(unit)])
-                return int(num * mult)
-    except (ValueError, AttributeError):
-        pass
-    return 0
-
-
 def _format_bytes(bytes_count: int) -> str:
-    """Format bytes to human-readable string."""
-    for unit in ["B", "KB", "MB", "GB"]:
-        if bytes_count < 1024.0:
-            return f"{bytes_count:.1f}{unit}"
-        bytes_count /= 1024.0
-    return f"{bytes_count:.1f}TB"
+    from airpods.sizes import format_bytes
+
+    return format_bytes(bytes_count, compact=True)
 
 
 def _resolve_cleanup_specs(names: Optional[list[str]]):
@@ -191,9 +171,8 @@ def _collect_cleanup_targets(
                 if image in seen_images:
                     continue
                 seen_images.add(image)
-                size_str = manager.runtime.image_size(image)
-                if size_str:
-                    size_bytes = _parse_image_size(size_str)
+                size_bytes = manager.runtime.image_size_bytes(image)
+                if size_bytes is not None:
                     plan.images.append((spec.name, image, size_bytes))
 
     if configs:
@@ -444,7 +423,7 @@ def register(app: typer.Typer) -> CommandMap:
         total_bytes_freed = 0
 
         if plan.pods:
-            count = _clean_pods(plan, timeout=DEFAULT_STOP_TIMEOUT)
+            count = _clean_pods(plan, timeout=get_cli_config().stop_timeout)
             results.add_row("Cleaning pods...", f"[ok]✓ {count} pod(s) removed[/]")
 
         if plan.volumes:

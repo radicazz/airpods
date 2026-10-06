@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 import typer
@@ -222,30 +221,7 @@ def is_verbose_mode(ctx: typer.Context) -> bool:
     return bool((ctx.obj or {}).get("verbose", False) or get_cli_config().verbose)
 
 
-_SIZE_PATTERN = re.compile(
-    r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGTP]?B)\s*$", re.IGNORECASE
-)
-_SIZE_MULTIPLIERS = {
-    "B": 1,
-    "KB": 1024,
-    "MB": 1024**2,
-    "GB": 1024**3,
-    "TB": 1024**4,
-}
-
-
-def _size_label_to_bytes(size_label: Optional[str]) -> Optional[float]:
-    if not size_label:
-        return None
-    match = _SIZE_PATTERN.match(size_label.strip())
-    if not match:
-        return None
-    value = float(match.group(1))
-    unit = match.group(2).upper()
-    multiplier = _SIZE_MULTIPLIERS.get(unit)
-    if multiplier is None:
-        return None
-    return value * multiplier
+from airpods.sizes import parse_bytes as _size_label_to_bytes
 
 
 def format_transfer_label(

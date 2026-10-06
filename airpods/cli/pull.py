@@ -15,7 +15,6 @@ import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Optional
 
 import typer
 from rich.progress import (
@@ -44,22 +43,9 @@ _DOWNLOAD_SIZE_RE = re.compile(
 
 
 def _parse_size_fragment(value: str, unit: str) -> int:
-    multipliers = {
-        "B": 1,
-        "KB": 1024,
-        "MB": 1024**2,
-        "GB": 1024**3,
-        "TB": 1024**4,
-        "PB": 1024**5,
-    }
-    try:
-        num = float(value)
-    except ValueError:
-        return 0
-    factor = multipliers.get(unit.upper())
-    if factor is None:
-        return 0
-    return int(num * factor)
+    from airpods.sizes import parse_bytes
+
+    return parse_bytes(f"{value}{unit}") or 0
 
 
 def _confirm_image_downloads(specs: list[ServiceSpec]) -> bool:
@@ -139,7 +125,7 @@ def _confirm_image_downloads(specs: list[ServiceSpec]) -> bool:
 
         # Warn if insufficient space (with 10% buffer)
         if total_bytes > 0 and total_bytes * 1.1 > available:
-            console.print(f"[warn]⚠ Warning: Download may exceed available space[/]")
+            console.print("[warn]⚠ Warning: Download may exceed available space[/]")
     console.print()
 
     # Prompt for confirmation

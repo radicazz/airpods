@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Tuple
 
 import typer
-from rich import box
 from rich.console import RenderableType
 from rich.panel import Panel
 from rich.prompt import Confirm

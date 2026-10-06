@@ -26,8 +26,8 @@ DEFAULT_CONFIG_DICT = {
     "dependencies": {
         "required": ["uv"],
         "runtime_deps": {
-            "podman": ["podman", "podman-compose"],
-            "docker": ["docker", "docker-compose"],
+            "podman": ["podman"],
+            "docker": ["docker"],
         },
         "optional": ["nvidia-smi"],
         "skip_checks": False,

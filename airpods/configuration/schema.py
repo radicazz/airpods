@@ -58,8 +58,8 @@ class DependenciesConfig(BaseModel):
     required: List[str] = Field(default_factory=lambda: ["uv"])
     runtime_deps: Dict[str, List[str]] = Field(
         default_factory=lambda: {
-            "podman": ["podman", "podman-compose"],
-            "docker": ["docker", "docker-compose"],
+            "podman": ["podman"],
+            "docker": ["docker"],
         }
     )
     optional: List[str] = Field(default_factory=lambda: ["nvidia-smi"])

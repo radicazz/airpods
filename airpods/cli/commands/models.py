@@ -526,7 +526,6 @@ def info_model_cmd(
 
         # Display model information
         from rich.panel import Panel
-        from rich.text import Text
 
         # Build info text
         info_lines = []
@@ -557,17 +556,17 @@ def info_model_cmd(
 
         # Show modelfile
         if "modelfile" in info:
-            info_lines.append(f"\n[bold]Modelfile:[/bold]")
+            info_lines.append("\n[bold]Modelfile:[/bold]")
             info_lines.append(f"[dim]{info['modelfile']}[/dim]")
 
         # Show parameters
         if "parameters" in info:
-            info_lines.append(f"\n[bold]Parameters:[/bold]")
+            info_lines.append("\n[bold]Parameters:[/bold]")
             info_lines.append(f"[dim]{info['parameters']}[/dim]")
 
         # Show template if available
         if "template" in info:
-            info_lines.append(f"\n[bold]Template:[/bold]")
+            info_lines.append("\n[bold]Template:[/bold]")
             # Truncate long templates
             template = info["template"]
             if len(template) > 200:
@@ -576,7 +575,7 @@ def info_model_cmd(
 
         panel = Panel(
             "\n".join(info_lines),
-            title=f"[info]Model Information[/]",
+            title="[info]Model Information[/]",
             border_style="cyan",
         )
 
@@ -614,8 +613,6 @@ def search_models_cmd(
         if hf_results:
             for model in hf_results:
                 repo_id = model["repo_id"]
-                author = model["author"]
-                model_name = model["model_name"]
                 downloads = model.get("downloads", 0)
                 likes = model.get("likes", 0)
                 url = f"https://huggingface.co/{repo_id}"
@@ -635,15 +632,15 @@ def search_models_cmd(
                 console.print(f"    [dim]→ [link={url}]{url}[/link][/dim]")
 
             console.print(
-                f"\n[dim]Tip: Pull with 'airpods models pull <repo> --source huggingface'[/dim]"
+                "\n[dim]Tip: Pull with 'airpods models pull <repo> --source huggingface'[/dim]"
             )
         else:
             console.print("[dim]No results found[/dim]")
             console.print(
-                f"\n[dim]Browse models: [link=https://ollama.com/library]https://ollama.com/library[/link][/dim]"
+                "\n[dim]Browse models: [link=https://ollama.com/library]https://ollama.com/library[/link][/dim]"
             )
             console.print(
-                f"[dim]               [link=https://huggingface.co/models?library=gguf]https://huggingface.co/models?library=gguf[/link][/dim]"
+                "[dim]               [link=https://huggingface.co/models?library=gguf]https://huggingface.co/models?library=gguf[/link][/dim]"
             )
 
     except ollama.OllamaAPIError as e:

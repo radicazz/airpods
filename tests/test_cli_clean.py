@@ -20,7 +20,7 @@ def mock_manager():
     with patch("airpods.cli.commands.clean.manager") as mock:
         mock.runtime.pod_exists.return_value = False
         mock.runtime.list_volumes.return_value = []
-        mock.runtime.image_size.return_value = None
+        mock.runtime.image_size_bytes.return_value = None
         yield mock
 
 
@@ -45,7 +45,7 @@ def mock_resolve_services():
 @pytest.fixture
 def mock_podman():
     """Mock podman availability check."""
-    with patch("airpods.cli.commands.clean.ensure_podman_available"):
+    with patch("airpods.cli.commands.clean.ensure_runtime_available"):
         yield
 
 
@@ -93,7 +93,7 @@ def test_clean_dry_run_shows_plan(
     """Test that dry-run mode shows what would be deleted."""
     mock_manager.runtime.pod_exists.return_value = True
     mock_manager.runtime.list_volumes.return_value = ["airpods_ollama_data"]
-    mock_manager.runtime.image_size.return_value = "3.5GB"
+    mock_manager.runtime.image_size_bytes.return_value = int(3.5 * 1024**3)
 
     result = runner.invoke(app, ["state", "clean", "--all", "--dry-run"])
     assert result.exit_code == 0
@@ -147,7 +147,7 @@ def test_clean_volumes_only(
 
 def test_clean_images_only(mock_manager, mock_resolve_services, mock_podman):
     """Test cleaning only images."""
-    mock_manager.runtime.image_size.return_value = "3.5GB"
+    mock_manager.runtime.image_size_bytes.return_value = int(3.5 * 1024**3)
 
     result = runner.invoke(app, ["state", "clean", "--images", "--force"])
     assert result.exit_code == 0
@@ -227,7 +227,9 @@ def test_clean_requires_confirmation_without_force(
 def test_clean_auto_confirm_from_config_skips_prompt(
     mock_confirm, mock_get_cli_config, mock_manager, mock_resolve_services, mock_podman
 ):
-    mock_get_cli_config.return_value = type("Config", (), {"auto_confirm": True})
+    mock_get_cli_config.return_value = type(
+        "Config", (), {"auto_confirm": True, "stop_timeout": 10}
+    )
     mock_manager.runtime.pod_exists.return_value = True
 
     result = runner.invoke(app, ["state", "clean", "--pods"])
@@ -252,7 +254,7 @@ def test_clean_all_flag(mock_manager, mock_resolve_services, mock_podman, mock_d
     """Test that --all flag enables all cleanup targets."""
     mock_manager.runtime.pod_exists.return_value = True
     mock_manager.runtime.list_volumes.return_value = ["airpods_ollama_data"]
-    mock_manager.runtime.image_size.return_value = "3.5GB"
+    mock_manager.runtime.image_size_bytes.return_value = int(3.5 * 1024**3)
 
     configs_dir = mock_dirs["configs"]
     (configs_dir / "config.toml").write_text("test")
