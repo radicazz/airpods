@@ -4,10 +4,9 @@ import json
 import logging
 import shlex
 import subprocess
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
 from ._container_cli import ContainerCLI
-from .logging import console
 
 log = logging.getLogger(__name__)
 
@@ -56,8 +55,10 @@ def _ps_json(filters: Optional[Dict] = None) -> List[Dict]:
 
     try:
         proc = _run(args)
-    except subprocess.CalledProcessError:
-        return []
+    except subprocess.CalledProcessError as exc:
+        raise DockerError(
+            f"failed to list containers: {_format_exc_output(exc)}"
+        ) from exc
 
     containers: List[Dict] = []
     for line in (proc.stdout or "").splitlines():
@@ -106,8 +107,9 @@ def _merge_pod_status(current: str, incoming: str) -> str:
 # ------------------------------------------------------------------
 
 
-def pod_exists(pod: str) -> bool:
-    return container_exists(f"{pod}-0")
+def pod_exists(pod: str, *, container_names: Sequence[str] | None = None) -> bool:
+    names = container_names if container_names is not None else [f"{pod}-0"]
+    return any(container_exists(name) for name in names)
 
 
 def ensure_pod(
@@ -119,10 +121,15 @@ def ensure_pod(
     return False
 
 
-def pod_status() -> List[Dict]:
+def pod_status(
+    *, pod_containers: Mapping[str, Sequence[str]] | None = None
+) -> List[Dict]:
     containers = _ps_json()
 
     pods: Dict[str, Dict] = {}
+    membership = {
+        name: pod for pod, names in (pod_containers or {}).items() for name in names
+    }
     for container in containers:
         name = container.get("Names", "")
         if not name:
@@ -130,7 +137,15 @@ def pod_status() -> List[Dict]:
 
         raw_status = container.get("State") or container.get("Status") or ""
         status = _normalize_container_status(str(raw_status))
-        pod_name = name.rsplit("-", 1)[0] if "-" in name else name
+        if pod_containers is not None:
+            pod_name = membership.get(name)
+            if pod_name is None:
+                continue
+        else:
+            parts = name.rsplit("-", 1)
+            if len(parts) != 2 or not parts[1].isdigit():
+                continue
+            pod_name = parts[0]
 
         if pod_name not in pods:
             pods[pod_name] = {"Name": pod_name, "Status": status, "Containers": []}
@@ -143,70 +158,45 @@ def pod_status() -> List[Dict]:
     return list(pods.values())
 
 
-def pod_inspect(name: str) -> Optional[Dict]:
-    container_name = f"{name}-0"
-    try:
-        proc = _run(["container", "inspect", container_name])
-    except subprocess.CalledProcessError:
-        return None
-    try:
-        parsed = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return None
-    return parsed[0] if isinstance(parsed, list) and parsed else parsed
+def pod_inspect(
+    name: str, *, container_names: Sequence[str] | None = None
+) -> Optional[Dict]:
+    names = container_names if container_names is not None else [f"{name}-0"]
+    for container in names:
+        inspected = container_inspect(container)
+        if inspected:
+            return inspected
+    return None
 
 
-def stop_pod(name: str, timeout: int = 10) -> None:
-    try:
-        proc = _run(
-            ["ps", "--all", "--filter", f"name={name}-", "--format", "{{.Names}}"]
-        )
-        container_names = [
-            line.strip() for line in proc.stdout.splitlines() if line.strip()
-        ]
-        for container_name in container_names:
-            try:
-                _run(
-                    ["container", "stop", f"--time={timeout}", container_name],
-                    capture=False,
-                )
-            except subprocess.CalledProcessError as exc:
-                log.warning(
-                    "failed to stop container %s: %s",
-                    container_name,
-                    _format_exc_output(exc),
-                )
-    except subprocess.CalledProcessError as exc:
-        detail = _format_exc_output(exc)
-        msg = f"failed to stop pod {name}"
-        if detail:
-            msg = f"{msg}: {detail}"
-        raise DockerError(msg) from exc
+def _operate_on_pod(
+    name: str, operation: str, container_names: Sequence[str], timeout: int = 10
+) -> None:
+    failures = []
+    for container_name in container_names:
+        if not container_exists(container_name):
+            continue
+        args = ["container", operation]
+        args.extend([f"--time={timeout}"] if operation == "stop" else ["--force"])
+        args.append(container_name)
+        try:
+            _run(args, capture=False)
+        except subprocess.CalledProcessError as exc:
+            failures.append(f"{container_name}: {_format_exc_output(exc)}")
+    if failures:
+        raise DockerError(f"failed to {operation} pod {name}: {'; '.join(failures)}")
 
 
-def remove_pod(name: str) -> None:
-    try:
-        proc = _run(
-            ["ps", "--all", "--filter", f"name={name}-", "--format", "{{.Names}}"]
-        )
-        container_names = [
-            line.strip() for line in proc.stdout.splitlines() if line.strip()
-        ]
-        for container_name in container_names:
-            try:
-                _run(["container", "rm", "--force", container_name], capture=False)
-            except subprocess.CalledProcessError as exc:
-                log.warning(
-                    "failed to remove container %s: %s",
-                    container_name,
-                    _format_exc_output(exc),
-                )
-    except subprocess.CalledProcessError as exc:
-        detail = _format_exc_output(exc)
-        msg = f"failed to remove pod {name}"
-        if detail:
-            msg = f"{msg}: {detail}"
-        raise DockerError(msg) from exc
+def stop_pod(
+    name: str, timeout: int = 10, *, container_names: Sequence[str] | None = None
+) -> None:
+    names = container_names if container_names is not None else [f"{name}-0"]
+    _operate_on_pod(name, "stop", names, timeout)
+
+
+def remove_pod(name: str, *, container_names: Sequence[str] | None = None) -> None:
+    names = container_names if container_names is not None else [f"{name}-0"]
+    _operate_on_pod(name, "rm", names)
 
 
 def remove_image(image: str) -> None:
@@ -273,7 +263,7 @@ def run_container(
         "host",
     ]
 
-    if userns_mode:
+    if userns_mode and userns_mode != "keep-id":
         args.extend(["--userns", userns_mode])
     if memory:
         args.extend(["--memory", memory])

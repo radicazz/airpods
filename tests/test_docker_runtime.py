@@ -96,6 +96,6 @@ def test_run_container_passes_userns_and_resource_limits(monkeypatch):
     )
 
     run_args = calls[-1]
-    assert "--userns" in run_args and "keep-id" in run_args
+    assert "--userns" not in run_args
     assert "--memory" in run_args and "2g" in run_args
     assert "--cpus" in run_args and "1.5" in run_args

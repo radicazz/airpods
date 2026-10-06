@@ -42,7 +42,11 @@ class ContainerCLI:
 
     @staticmethod
     def format_exc_output(exc: subprocess.CalledProcessError) -> str:
-        output = getattr(exc, "stdout", None) or getattr(exc, "output", None)
+        output = (
+            getattr(exc, "stdout", None)
+            or getattr(exc, "output", None)
+            or getattr(exc, "stderr", None)
+        )
         return output.strip() if output else ""
 
     # ------------------------------------------------------------------
@@ -158,19 +162,30 @@ class ContainerCLI:
     # ------------------------------------------------------------------
 
     def container_exists(self, name: str) -> bool:
-        try:
-            self.run(["container", "inspect", name])
-            return True
-        except subprocess.CalledProcessError:
-            return False
+        return self.container_inspect(name) is not None
 
     def container_inspect(self, name: str) -> Optional[Dict]:
         try:
             proc = self.run(["container", "inspect", name])
+        except subprocess.CalledProcessError as exc:
+            detail = self.format_exc_output(exc)
+            if any(
+                marker in detail.lower()
+                for marker in ("no such container", "no such object")
+            ):
+                return None
+            raise self._error(f"failed to inspect container {name}: {detail}") from exc
+        try:
             parsed = json.loads(proc.stdout)
-            return parsed[0] if isinstance(parsed, list) and parsed else parsed
-        except (subprocess.CalledProcessError, json.JSONDecodeError):
-            return None
+            if isinstance(parsed, list) and parsed:
+                parsed = parsed[0]
+            if not isinstance(parsed, dict):
+                raise ValueError("expected a container object")
+            return parsed
+        except ValueError as exc:
+            raise self._error(
+                f"invalid inspection output for container {name}"
+            ) from exc
 
     def stream_logs(
         self,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from typing import Dict, Iterable, List, Optional, Protocol
+from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Sequence
 
 from airpods import docker, podman
 
@@ -173,7 +173,7 @@ class _CLIRuntime:
     def _wrap(self, fn, *args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except self._error as exc:
+        except (self._error, subprocess.CalledProcessError, OSError) as exc:
             raise ContainerRuntimeError(str(exc)) from exc
 
     def ensure_volume(self, name: str) -> bool:
@@ -197,7 +197,7 @@ class _CLIRuntime:
         name: str,
         image: str,
         env: Dict[str, str],
-        volumes: Iterable[tuple[int, int]],
+        volumes: Iterable[tuple[str, str]],
         gpu: bool = False,
         restart_policy: str = "unless-stopped",
         gpu_device_flag: Optional[str] = None,
@@ -227,10 +227,10 @@ class _CLIRuntime:
         )
 
     def container_exists(self, name: str) -> bool:
-        return self._mod.container_exists(name)
+        return self._wrap(self._mod.container_exists, name)
 
     def pod_exists(self, name: str) -> bool:
-        return self._mod.pod_exists(name)
+        return self._wrap(self._mod.pod_exists, name)
 
     def stop_pod(self, name: str, timeout: int = 10) -> None:
         self._wrap(self._mod.stop_pod, name, timeout=timeout)
@@ -239,10 +239,10 @@ class _CLIRuntime:
         self._wrap(self._mod.remove_pod, name)
 
     def pod_status(self) -> List[Dict]:
-        return self._mod.pod_status()
+        return self._wrap(self._mod.pod_status)
 
     def pod_inspect(self, name: str) -> Optional[Dict]:
-        return self._mod.pod_inspect(name)
+        return self._wrap(self._mod.pod_inspect, name)
 
     def stream_logs(
         self,
@@ -252,22 +252,24 @@ class _CLIRuntime:
         tail: Optional[int] = None,
         since: Optional[str] = None,
     ) -> int:
-        return self._mod.stream_logs(container, follow=follow, tail=tail, since=since)
+        return self._wrap(
+            self._mod.stream_logs, container, follow=follow, tail=tail, since=since
+        )
 
     def image_size(self, image: str) -> Optional[str]:
-        return self._mod.image_size(image)
+        return self._wrap(self._mod.image_size, image)
 
     def image_exists(self, image: str) -> bool:
-        return self._mod.image_exists(image)
+        return self._wrap(self._mod.image_exists, image)
 
     def image_size_bytes(self, image: str) -> Optional[int]:
-        return self._mod.image_size_bytes(image)
+        return self._wrap(self._mod.image_size_bytes, image)
 
     def get_remote_image_size(self, image: str) -> Optional[int]:
-        return self._mod.get_remote_image_size(image)
+        return self._wrap(self._mod.get_remote_image_size, image)
 
     def list_volumes(self) -> List[str]:
-        return self._mod.list_volumes()
+        return self._wrap(self._mod.list_volumes)
 
     def remove_volume(self, name: str) -> None:
         self._wrap(self._mod.remove_volume, name)
@@ -287,10 +289,10 @@ class _CLIRuntime:
         self._wrap(self._mod.copy_from_container, container, src, dest)
 
     def container_inspect(self, name: str) -> Optional[Dict]:
-        return self._mod.container_inspect(name)
+        return self._wrap(self._mod.container_inspect, name)
 
     def list_containers(self, filters: Optional[Dict] = None) -> List[Dict]:
-        return self._mod.list_containers(filters)
+        return self._wrap(self._mod.list_containers, filters)
 
 
 class PodmanRuntime(_CLIRuntime):
@@ -299,15 +301,44 @@ class PodmanRuntime(_CLIRuntime):
 
 
 class DockerRuntime(_CLIRuntime):
-    def __init__(self) -> None:
+    def __init__(
+        self, pod_containers: Mapping[str, Sequence[str]] | None = None
+    ) -> None:
         super().__init__("docker", docker, docker.DockerError)
+        self._pod_containers = (
+            dict(pod_containers) if pod_containers is not None else None
+        )
+
+    def _members(self, pod: str) -> Sequence[str]:
+        if self._pod_containers is None:
+            return [f"{pod}-0"]
+        return self._pod_containers.get(pod, [])
+
+    def pod_exists(self, name: str) -> bool:
+        return self._wrap(docker.pod_exists, name, container_names=self._members(name))
+
+    def pod_inspect(self, name: str) -> Optional[Dict]:
+        return self._wrap(docker.pod_inspect, name, container_names=self._members(name))
+
+    def pod_status(self) -> List[Dict]:
+        return self._wrap(docker.pod_status, pod_containers=self._pod_containers)
+
+    def stop_pod(self, name: str, timeout: int = 10) -> None:
+        self._wrap(
+            docker.stop_pod, name, timeout=timeout, container_names=self._members(name)
+        )
+
+    def remove_pod(self, name: str) -> None:
+        self._wrap(docker.remove_pod, name, container_names=self._members(name))
 
 
 def _runtime_available(runtime_name: str) -> bool:
     return shutil.which(runtime_name) is not None
 
 
-def get_runtime(prefer: str | None) -> ContainerRuntime:
+def get_runtime(
+    prefer: str | None, *, pod_containers: Mapping[str, Sequence[str]] | None = None
+) -> ContainerRuntime:
     """Get a container runtime instance based on preference.
 
     Args:
@@ -331,13 +362,13 @@ def get_runtime(prefer: str | None) -> ContainerRuntime:
             raise ContainerRuntimeError(
                 "Runtime preference is set to 'docker' but Docker is not installed."
             )
-        return DockerRuntime()
+        return DockerRuntime(pod_containers)
 
     if prefer in (None, "auto"):
         if _runtime_available("podman"):
             return PodmanRuntime()
         if _runtime_available("docker"):
-            return DockerRuntime()
+            return DockerRuntime(pod_containers)
         raise ContainerRuntimeError(
             "No container runtime found. Please install either Podman or Docker."
         )
