@@ -1,4 +1,4 @@
-# docs
+# docs/AGENTS
 
 - Keep docs short, non-bloated, and task-focused.
 - All docs must be Markdown (`.md`) files.

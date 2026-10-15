@@ -34,7 +34,8 @@ class ContainerCLI:
             self._cmd + args,
             text=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            # Runtime warnings must not contaminate JSON or formatted stdout.
+            stderr=subprocess.PIPE if capture else subprocess.STDOUT,
             check=check,
             timeout=timeout,
         )
@@ -42,12 +43,11 @@ class ContainerCLI:
 
     @staticmethod
     def format_exc_output(exc: subprocess.CalledProcessError) -> str:
-        output = (
-            getattr(exc, "stdout", None)
-            or getattr(exc, "output", None)
-            or getattr(exc, "stderr", None)
+        stdout = getattr(exc, "stdout", None) or getattr(exc, "output", None)
+        stderr = getattr(exc, "stderr", None)
+        return "\n".join(
+            part.strip() for part in (stdout, stderr) if part and part.strip()
         )
-        return output.strip() if output else ""
 
     # ------------------------------------------------------------------
     # Volumes

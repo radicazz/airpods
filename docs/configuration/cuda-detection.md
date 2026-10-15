@@ -1,65 +1,37 @@
 # docs/configuration/cuda-detection
 
-Airpods automatically detects your GPU and selects the right CUDA version for ComfyUI.
-
-## How It Works
-
-- Detects your GPU's compute capability via `nvidia-smi`
-- Maps compute capability to the best CUDA version
-- Selects the appropriate ComfyUI Docker image
-- Falls back to CUDA 12.6 if detection fails (works with most GPUs)
+Airpods uses GPU detection, CUDA selection, and runtime passthrough checks to choose effective service images. Inspect the detected setup with `airpods doctor`.
 
 ## Configuration
 
-### Auto-Detection (Default)
-
 ```toml
 [runtime]
-cuda_version = "auto"  # Let airpods choose
-```
+cuda_version = "auto"  # auto, cu118, cu126, cu128, cu130, cpu
+comfyui_provider = "auto"  # auto, yanwk, mmartial
 
-### Manual Override
-
-```toml
-[runtime]
-cuda_version = "cu126"  # Force CUDA 12.6
-
-# Or per-service:
 [services.comfyui]
-cuda_override = "cu128"  # Force CUDA 12.8 for ComfyUI only
+cuda_override = "cu128"  # optional per-service image selection override
 ```
 
-### CPU Only
+ComfyUI selection priority is `cuda_override`, then a non-auto runtime setting, then detected compute capability, then `cu126` when capability detection fails. The fallback is an image-selection default, not a driver compatibility guarantee.
 
-```toml
-[runtime]
-cuda_version = "cpu"  # Disable GPU
-```
+## Selection Implemented by Airpods
 
-## Check Your Setup
+| Detected compute capability | CUDA selection | Automatic provider |
+| --------------------------- | -------------- | ------------------ |
+| 3.5–5.3 entries             | `cu118`        | `mmartial`         |
+| 6.x                         | `cu126`        | `mmartial`         |
+| 7.x                         | `cu126`        | `yanwk`            |
+| 8.x                         | `cu128`        | `yanwk`            |
+| 9.0 and newer fallback      | `cu130`        | `yanwk`            |
 
-```bash
-airpods doctor  # Shows detected GPU and CUDA version
-```
+This describes the code's mapping, not NVIDIA's full support matrix. `mmartial` has configured `cu126` and `cu128` images; other CUDA selections fall back to its `cu126` image. `yanwk` has configured `cu118`, `cu126`, `cu128`, and `cu130` images. See `airpods/cuda.py` and `airpods/comfyui.py` for exact mappings/tags and [ComfyUI](../services/comfyui.md) for provider-specific mounts.
 
-## Common Issues
+## CPU and Passthrough
 
-**GPU not being used?** Try forcing CUDA 12.6:
+- `airpods start --cpu` forces CPU execution and selects CPU service images for the invocation, including `--pre-fetch`.
+- `runtime.cuda_version = "cpu"` disables GPU use globally.
+- `services.<name>.gpu.force_cpu = true` or `gpu.enabled = false` disables GPU use for that service.
+- Missing GPU hardware or runtime passthrough causes startup to select CPU behavior. ComfyUI uses the `yanwk` CPU image; llama.cpp uses `:server`.
 
-```toml
-[services.comfyui]
-cuda_override = "cu126"
-```
-
-**Detection failed?** Install NVIDIA drivers and verify `nvidia-smi` works.
-
-## GPU → CUDA Mapping
-
-| GPU Series           | CUDA Version | Image         |
-| -------------------- | ------------ | ------------- |
-| GTX 10/RTX 20 series | cu126        | cu126-megapak |
-| RTX 30/40 series     | cu128        | cu128-slim    |
-| Older GPUs           | cu118        | cu118-slim    |
-| No GPU               | cpu          | cpu           |
-
-The default fallback (cu126) works with most modern GPUs.
+GPU detection alone does not prove passthrough works. `doctor` checks NVIDIA Container Toolkit/CDI availability and prints remediation. Verify `nvidia-smi` and the selected container runtime setup when GPU startup fails.

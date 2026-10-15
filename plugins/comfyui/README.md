@@ -1,6 +1,6 @@
 # ComfyUI Plugins
 
-This directory contains ComfyUI custom nodes and workflows that are part of the airpods project.
+This directory contains bundled ComfyUI custom nodes and supports an optional workflow lookup directory. See [ComfyUI setup](../../docs/services/comfyui.md) and the [AirPods Tools node guide](custom_nodes/comfyui-airpods/README.md).
 
 ## Structure
 
@@ -8,7 +8,7 @@ This directory contains ComfyUI custom nodes and workflows that are part of the 
 plugins/comfyui/
 ├── custom_nodes/         # Custom nodes synced to ComfyUI
 │   └── comfyui-airpods/  # Airpods integration nodes
-└── workflows/           # Optional repo workflows with model mappings
+└── workflows/           # Optional lookup location; no workflows currently bundled
 ```
 
 ## Custom Nodes
@@ -56,7 +56,7 @@ The sync process:
 
 ## Workflows
 
-The `workflows/` directory contains example workflows with companion TOML files that map model filenames to download URLs.
+The CLI can look up workflows in an optional `workflows/` directory; none are currently bundled. Import a local JSON file or URL, optionally accompanied by a TOML mapping of model filenames to download URLs. See [workflow commands](../../docs/commands/workflows.md).
 
 ### Importing Workflows
 
@@ -66,17 +66,17 @@ Use the `airpods workflows add` command to import workflows into your ComfyUI wo
 # List available workflows
 airpods workflows add
 
-# Import a workflow from the repo
-airpods workflows add my-workflow
+# Import a local workflow
+airpods workflows add ./my-workflow.json
 
 # Import and automatically download required models
-airpods workflows add my-workflow --sync
+airpods workflows add ./my-workflow.json --sync
 
 # List saved workflows (same as "airpods workflows list")
 airpods workflows sync
 
 # Sync missing models for a workflow
-airpods workflows sync my-workflow
+airpods workflows sync my-workflow.json
 ```
 
 ### Workflow Format

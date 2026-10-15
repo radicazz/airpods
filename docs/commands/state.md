@@ -10,6 +10,7 @@ Create a compressed archive containing:
 - Open WebUI database (`webui.db`) plus optional SQLite `.dump`
 - Open WebUI plugins stored under `webui_plugins`
 - Ollama model metadata (names, digests, URLs, params, but **not** GGUF blobs)
+- Non-GGUF files from the shared GGUF store (model binaries excluded)
 - Manifest with version info for airpods, Open WebUI, and Ollama
 
 ```bash
@@ -37,8 +38,8 @@ Unpack a backup archive and restore configs, WebUI data, and metadata into fresh
 # Restore everything, backing up existing configs/db first
 airpods state restore ~/backups/airpods-backup-20250712.tar.gz
 
-# Restore configs only, skipping database and metadata
-airpods state restore archive.tgz --skip-db --skip-models
+# Restore configs without the database, plugins, or Ollama metadata
+airpods state restore archive.tgz --skip-db --skip-plugins --skip-models
 ```
 
 **Arguments & Options:**
@@ -56,7 +57,7 @@ airpods state restore archive.tgz --skip-db --skip-models
 2. Copy configs into `$AIRPODS_HOME/configs` (optionally backing up current files)
 3. Restore WebUI database (`webui.db`) or rebuild from `.dump`
 4. Rehydrate `webui_plugins`
-5. Save Ollama metadata + manifest under `$AIRPODS_HOME/configs/restores/`
+5. Restore GGUF non-model files; save Ollama metadata + manifest under `$AIRPODS_HOME/configs/restores/`
 6. Print reminders to re-pull Ollama models and restart services
 
 ### Best Practices
@@ -67,7 +68,7 @@ airpods state restore archive.tgz --skip-db --skip-models
 - After restoring, re-pull Ollama models using the metadata file saved in `configs/restores/`
 - Keep sensitive archives encrypted if they contain user data
 
-With these commands you can safely nuke volumes (`airpods state clean --volumes`) and bring them back later without losing Open WebUI users, chats, or plugin state.
+GGUF non-model files are restored even with `--skip-models`; that flag skips only Ollama metadata. Backups do not include all ComfyUI data, custom nodes, or model binaries. Check the archive contents and keep any additional files separately before cleaning volumes.
 
 ## `airpods state clean`
 

@@ -3,12 +3,35 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
 
-from airpods import docker
-from airpods.runtime import ContainerRuntimeError, DockerRuntime
+from airpods import docker, podman
+from airpods.runtime import ContainerRuntimeError, DockerRuntime, PodmanRuntime
+
+
+@pytest.mark.parametrize(
+    ("module", "runtime_cls"), [(docker, DockerRuntime), (podman, PodmanRuntime)]
+)
+def test_container_inspection_ignores_stderr_warnings(monkeypatch, module, runtime_cls):
+    # Exercise the real runner with both streams populated, as Podman does when
+    # device discovery emits warnings alongside otherwise valid inspection JSON.
+    monkeypatch.setattr(
+        module._cli,
+        "_cmd",
+        [
+            sys.executable,
+            "-c",
+            "import sys; "
+            "print('warning: permission denied for /dev/vboxusb', file=sys.stderr); "
+            'print(\'[{"State": {"Status": "running"}}]\')',
+        ],
+    )
+    assert runtime_cls().container_inspect("llamacpp-0") == {
+        "State": {"Status": "running"}
+    }
 
 
 def test_docker_operations_only_target_configured_members(monkeypatch):
@@ -58,12 +81,19 @@ def test_docker_removal_failure_is_reported(monkeypatch):
 @pytest.mark.parametrize(
     "detail", ["No such container: webui", "No such object: webui"]
 )
-def test_missing_container_is_distinct_from_runtime_failure(monkeypatch, detail):
+@pytest.mark.parametrize(
+    ("module", "runtime_cls"), [(docker, DockerRuntime), (podman, PodmanRuntime)]
+)
+def test_missing_container_is_distinct_from_runtime_failure(
+    monkeypatch, detail, module, runtime_cls
+):
     def inspect(*args, **kwargs):
-        raise subprocess.CalledProcessError(1, ["docker", "inspect"], stderr=detail)
+        raise subprocess.CalledProcessError(
+            1, [module.__name__, "inspect"], output="[]\n", stderr=detail
+        )
 
-    monkeypatch.setattr(docker._cli, "run", inspect)
-    assert DockerRuntime().container_inspect("webui") is None
+    monkeypatch.setattr(module._cli, "run", inspect)
+    assert runtime_cls().container_inspect("webui") is None
 
 
 @pytest.mark.parametrize("output", ["[]", "null", "not JSON"])
@@ -75,12 +105,20 @@ def test_invalid_container_inspection_fails_closed(monkeypatch, output):
         DockerRuntime().container_inspect("webui")
 
 
-def test_engine_failure_does_not_report_container_missing(monkeypatch):
+@pytest.mark.parametrize(
+    ("module", "runtime_cls"), [(docker, DockerRuntime), (podman, PodmanRuntime)]
+)
+def test_engine_failure_does_not_report_container_missing(
+    monkeypatch, module, runtime_cls
+):
     def inspect(*args, **kwargs):
         raise subprocess.CalledProcessError(
-            1, ["docker", "inspect"], stderr="Cannot connect to the Docker daemon"
+            1,
+            [module.__name__, "inspect"],
+            output="[]\n",
+            stderr="Cannot connect to the container engine",
         )
 
-    monkeypatch.setattr(docker._cli, "run", inspect)
+    monkeypatch.setattr(module._cli, "run", inspect)
     with pytest.raises(ContainerRuntimeError, match="Cannot connect"):
-        DockerRuntime().container_exists("webui")
+        runtime_cls().container_exists("webui")

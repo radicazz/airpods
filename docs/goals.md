@@ -2,29 +2,22 @@
 
 ## Purpose
 
-- Provide a small, focused CLI that orchestrates local AI services (Ollama, Open WebUI, ComfyUI, and supporting components) rather than becoming a service or UI itself.
-- Make it easy to spin these services up and down in a secure, maintainable, and reproducible way on a single machine.
+Provide a focused CLI for running local AI services on one machine. Airpods manages containers, configuration, persistent data, GPU access, and readiness; Ollama, llama.cpp, Open WebUI, and ComfyUI provide inference and user interfaces.
 
-## What Airpods Should Do
+## Current Scope
 
-- Manage containers and pods for:
-  - Ollama as the local model runtime.
-  - Open WebUI as a ready‑made chat and management UI.
-  - ComfyUI as a workflow / graph UI.
-  - Caddy as a reverse proxy and TLS terminator.
-  - An optional file / notebook server (e.g. Jupyter or similar) for working with artifacts and data.
-- Provide simple, predictable lifecycle commands (`start`, `stop`, `status`, `logs`, `doctor`, `config`, and `state`) with optional `start --pre-fetch` support for warming images ahead of time. These commands must:
-  - Create and reuse volumes for persistent data.
-  - Wire services together correctly (ports, networks, secrets, GPU access).
-  - Fail with clear, actionable error messages when dependencies or containers are misconfigured.
-
-## What Airpods Is Not
-
-- It is not a replacement for Open WebUI or ComfyUI; those projects own their UI/feature surface.
-- It is not a hosted platform or multi‑tenant service; the focus is on local developer/creator environments.
+- Support Podman and Docker through the same lifecycle commands.
+- Create and reuse service resources while preserving user data.
+- Manage Ollama models, shared GGUF files, and ComfyUI workflow/model downloads.
+- Sync bundled plugins and install configured ComfyUI custom nodes.
+- Back up configuration, WebUI state, and model metadata without copying large model binaries.
+- Report actionable errors when runtime, GPU, model, or configuration requirements are unmet.
 
 ## Design Priorities
 
-- Prefer configuration and templates (TOML + runtime resolution) over hard‑coding service details.
-- Keep commands safe by default (non‑destructive `start`, explicit `state clean` for destructive actions).
-- Optimize for clarity and reproducibility: a new user should be able to go from zero to a working stack with a small number of documented commands.
+- Prefer TOML configuration and templates over hard-coded service details.
+- Keep resource reuse predictable and destructive actions explicit.
+- Keep documentation clear about implemented behavior versus proposals.
+- Preserve a small CLI; upstream services own their interfaces. A hosted platform, multi-tenant service, and custom web portal are outside the current scope.
+
+An optional reverse proxy remains a [future proposal](plans/service-gateway.md). Caddy and notebook/file servers are not shipped services. See [the roadmap](../TODO.md) for outstanding work.

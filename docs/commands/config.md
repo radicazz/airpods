@@ -1,142 +1,59 @@
 # docs/commands/config
 
-The `airpods config` command manages your airpods configuration file.
-
-## Quick Start
-
-```bash
-# Create default configuration
-airpods config init
-
-# View current config
-airpods config show
-
-# Edit in your $EDITOR
-airpods config edit
-```
+Airpods deep-merges a TOML file with built-in defaults, validates it, then resolves templates. Use `airpods config show --format json` to inspect the effective settings.
 
 ## Commands
 
-### `airpods config init`
-
-Creates a default configuration file at `$AIRPODS_HOME/configs/config.toml` (or `~/.config/airpods/configs/config.toml`).
-
-**Options:**
-
-- `--force` / `-f`: Overwrite existing file
-
-### `airpods config show`
-
-Display the current configuration.
-
-**Options:**
-
-- `--format` / `-f`: Output format (`toml` or `json`)
-
-### `airpods config path`
-
-Show the location of the configuration file.
-
-### `airpods config edit`
-
-Open the configuration file in your `$EDITOR` (defaults to `nano`).
-
-### `airpods config validate`
-
-Check if the configuration is valid and show warnings.
-
-### `airpods config reset`
-
-Reset configuration to defaults. Creates a timestamped backup.
-
-**Options:**
-
-- `--force` / `-f`: Skip confirmation prompt
-
-### `airpods config get <key>`
-
-Print a specific configuration value using dot notation.
-
-**Example:**
+| Command                                  | Behavior                                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `config init [--force]`                  | Write defaults to the active path, or `<state-root>/configs/config.toml`; `--force` overwrites. |
+| `config show [--format FORMAT]`          | Display TOML or effective JSON configuration.                                                   |
+| `config path`                            | Show the active file or default destination.                                                    |
+| `config edit`                            | Open the file in `$EDITOR` (default `nano`); create defaults if needed.                         |
+| `config validate`                        | Validate the configuration and report warnings.                                                 |
+| `config reset [--force]`                 | Reset to defaults with a timestamped backup; `--force` skips confirmation.                      |
+| `config get <key>`                       | Read a value using dot notation.                                                                |
+| `config set <key> <value> [--type TYPE]` | Validate and save a value; types: `auto`, `str`, `int`, `float`, `bool`, `json`.                |
 
 ```bash
-airpods config get cli.stop_timeout
-airpods config get services.ollama.image
+airpods config init
+airpods config set runtime.prefer docker
+airpods config set services.ollama.gpu.force_cpu true --type bool
+airpods config get cli.startup_timeout
 ```
 
-### `airpods config set <key> <value>`
+Help, version, and configuration repair commands (`init`, `edit`, `reset`) work without a container runtime or a valid active configuration.
 
-Update a specific configuration value with validation.
+## File Discovery and State Root
 
-**Options:**
+1. If `AIRPODS_CONFIG` is set, use that file exclusively. A missing file is an error when loading config; repair commands can create it.
+2. Otherwise, if `AIRPODS_HOME` is set, check its `configs/config.toml`, then legacy `config.toml`. If neither exists, use defaults under that home; do not search other locations.
+3. Otherwise, search `<repo-root>/configs/config.toml`, then `<repo-root>/config.toml` when a checkout is detected.
+4. Then search `$XDG_CONFIG_HOME/airpods/configs/config.toml`, followed by its legacy `config.toml`, when XDG is set.
+5. Then search `~/.config/airpods/configs/config.toml`, followed by its legacy `config.toml`.
+6. Fall back to built-in defaults.
 
-- `--type` / `-t`: Value type (`auto`, `str`, `int`, `float`, `bool`, `json`)
+The selected file's parent is the state root, except that a parent named `configs` makes its parent the root. The active config can therefore override the state location implied by `AIRPODS_HOME`.
 
-**Examples:**
+Without a config, the state root is explicit `AIRPODS_HOME`, otherwise `$XDG_CONFIG_HOME/airpods`, otherwise a writable detected checkout, otherwise `~/.config/airpods`. `start` (including `--pre-fetch`) can bootstrap defaults at `<state-root>/configs/config.toml`.
 
-```bash
-airpods config set cli.stop_timeout 30 --type int
-airpods config set services.ollama.gpu.enabled false --type bool
-```
+Runtime data lives under that root:
 
-## Configuration Priority
+- `configs/`: configuration, `webui_secret`, and restore metadata.
+- `volumes/`: bind-mounted service data; `bind://name/path` resolves here.
+- `volumes/airpods_models/gguf/`: shared GGUF files for llama.cpp.
 
-Airpods searches for configuration in this order:
+## Runtime and CLI Settings
 
-1. `$AIRPODS_CONFIG` (environment variable)
-2. `$AIRPODS_HOME/configs/config.toml`
-3. `$AIRPODS_HOME/config.toml` (legacy location)
-4. `<repo_root>/configs/config.toml`
-5. `<repo_root>/config.toml` (legacy location)
-6. `$XDG_CONFIG_HOME/airpods/configs/config.toml`
-7. `$XDG_CONFIG_HOME/airpods/config.toml` (legacy location)
-8. `~/.config/airpods/configs/config.toml`
-9. `~/.config/airpods/config.toml` (legacy location)
-10. Built-in defaults
-
-**Note:** All airpods configuration files (including `config.toml` and `webui_secret`) are now stored in the `configs/` subdirectory for better organization. Legacy locations are still supported for backwards compatibility.
-
-> [!TIP]
-> `airpods start` (with or without `--pre-fetch`) automatically bootstraps the default `config.toml` at the first writable path in the list above and reloads the CLI so the new file is in effect immediately. Whichever directory hosts that config becomes the Airpods “home”: the CLI stores `configs/`, `volumes/`, webui secrets, and other runtime data alongside each other under that directory so everything stays grouped together.
-
-## Template Variables
-
-Configuration values support template expansion:
+This partial configuration overrides defaults; omitted services and fields remain enabled/configured as shipped. Generate a complete file with `config init`.
 
 ```toml
-[services.open-webui.env]
-OLLAMA_BASE_URL = "http://ollama:{{services.ollama.ports.0.container}}"
-```
-
-Available variables:
-
-- `runtime.host_gateway`: Host gateway address
-- `runtime.network_name`: Network name
-- `services.<name>.ports.0.host`: Service host port
-- `services.<name>.ports.0.container`: Service container port
-- `services.<name>.image`: Service image
-- `services.<name>.pod`: Service pod name
-
-## Configuration Structure
-
-```toml
-[meta]
-version = "1.0"
-
 [runtime]
-prefer = "auto"  # auto, podman, docker
-host_gateway = "auto"
-network_name = "airpods_network"
-gpu_device_flag = "auto"
+prefer = "auto"  # auto, podman, docker; auto prefers Podman
 restart_policy = "unless-stopped"
-
-[runtime.network]
-driver = "bridge"
-subnet = "10.89.0.0/16"  # optional custom subnet
-gateway = "10.89.0.1"    # optional custom gateway
-dns_servers = ["8.8.8.8", "1.1.1.1"]  # optional custom DNS
-ipv6 = false
-internal = false
+gpu_device_flag = "auto"
+cuda_version = "auto"  # auto, cu118, cu126, cu128, cu130, cpu
+comfyui_provider = "auto"  # auto, yanwk, mmartial
 
 [cli]
 stop_timeout = 10
@@ -145,50 +62,54 @@ ping_timeout = 2.0
 startup_timeout = 120
 startup_check_interval = 2.0
 max_concurrent_pulls = 3
-plugin_owner = "auto" # auto, admin, airpods
+plugin_owner = "auto"  # auto, admin, airpods
 auto_confirm = false
 verbose = false
 debug = false
 
-`startup_timeout` / `startup_check_interval` govern how long `airpods start` waits for each service to go healthy, and `max_concurrent_pulls` controls how many images Podman will pull in parallel (use `--sequential` to temporarily override). `plugin_owner` controls which Open WebUI user id owns auto‑imported plugins: `"auto"` reuses an existing admin if present or creates a dedicated `airpods-system` owner on fresh installs, `"admin"` only reuses an admin, and `"airpods"` always uses the dedicated owner. Set `auto_confirm` to true for unattended workflows where you want `clean` to skip prompts, and `verbose` when you want lifecycle commands to always show resource reuse messages even without `-V/--verbose`.
-
 [dependencies]
-required = ["podman", "podman-compose", "uv"]
+required = ["uv"]
 optional = ["nvidia-smi"]
 skip_checks = false
 
-`skip_checks` lets airpods skip dependency probing entirely. This can be useful inside tightly controlled environments (CI, air-gapped towers) where you already know Podman, UV, and optional binaries are present and fast startup is preferred over repeated checks.
+[dependencies.runtime_deps]
+podman = ["podman"]
+docker = ["docker"]
+```
 
-[services.ollama]
-enabled = true
-image = "docker.io/ollama/ollama:latest"
-pod = "ollama"
-container = "ollama-0"
-network_aliases = ["ollama"]  # accessible at ollama:11434
-needs_webui_secret = false
+`startup_timeout` and `startup_check_interval` control readiness polling with `start --wait`; failures/timeouts exit with status 1. `max_concurrent_pulls` accepts 1–10; `--sequential` overrides it. `auto_confirm` skips supported start/download/cleanup prompts. `skip_checks` bypasses dependency probing.
 
-[[services.ollama.ports]]
-host = 11434
-container = 11434
+For WebUI plugin ownership, `auto` reuses an admin or attempts to create the built-in admin on an empty database; `admin` reuses an admin and otherwise falls back to `system`. The legacy `airpods` mode currently falls back to `system`. See [plugin behavior](../../plugins/open-webui/README.md).
+
+## Services, Networking, and Templates
+
+Both runtimes use **host networking**. Containers share the host network and reach each other through `localhost`. `ports` records endpoint metadata; it does not forward ports. The service process must listen on the chosen host port (for example WebUI's `PORT` or llama.cpp's `command_args.port`). Bridge network settings and `network_aliases` are not supported.
+
+```toml
+[services.open-webui]
+auto_configure_ollama = true
 
 [services.ollama.gpu]
 enabled = true
 force_cpu = false
 
-Set `force_cpu` when a service should never request GPU resources even if they are globally available. This makes it possible to disable GPU scheduling for individual services via configuration while still letting operators pass `airpods start --cpu` to force a CLI-wide CPU fallback.
-
-[services.ollama.health]
-path = "/api/tags"
-expected_status = [200, 299]
-
-[services.ollama.env]
-OLLAMA_ORIGINS = "*"
-OLLAMA_HOST = "0.0.0.0"
+[services.ollama.resources]
+memory = "8g"
+cpus = "4"
 ```
 
-## ComfyUI Custom Nodes
+`auto_configure_ollama` is off by default. When enabled, it injects Ollama URLs using Ollama's host port. To configure only the native Ollama URL explicitly instead:
 
-Configure ComfyUI custom nodes via `services.comfyui.custom_nodes.install`. Entries support either a git repo or a local path.
+```toml
+[services.open-webui.env]
+OLLAMA_BASE_URL = "http://localhost:{{services.ollama.ports.0.host}}"
+```
+
+Templates are resolved in service environment values, `default_model`, `default_model_url`, and command arguments. Available service references include `services.<name>.ports.0.host`, `.ports.0.container`, `.image`, `.pod`, and `.default_model`. Runtime fields from the schema can also be referenced; there is no `runtime.host_gateway` or `runtime.network_name` field.
+
+Service fields also include `enabled`, `image`, `pod`, `container`, `volumes`, `health`, `pids_limit`, `needs_webui_secret`, `command_args`, and `entrypoint_override`. See [llama.cpp](../services/llamacpp.md) for command arguments and [CUDA selection](../configuration/cuda-detection.md) for CPU/GPU settings. Validate manual edits with `airpods config validate`.
+
+## ComfyUI Custom Nodes
 
 ```toml
 [services.comfyui.custom_nodes]
@@ -198,74 +119,4 @@ install = [
 ]
 ```
 
-Notes:
-
-- `repo` entries are cloned into the `comfyui_custom_nodes` volume (requires `git` on PATH).
-- `path` entries must exist; relative paths resolve under `$AIRPODS_HOME`.
-- `requirements` defaults to `requirements.txt` and are installed inside the running ComfyUI container.
-
-## Network Configuration
-
-Services can use network aliases for cleaner inter-service communication:
-
-```toml
-[services.ollama]
-network_aliases = ["ollama"]
-
-[services.open-webui.env]
-OLLAMA_BASE_URL = "http://ollama:11434"  # prefer aliases; host gateway only for host-bound clients
-```
-
-**Network options** (`runtime.network`):
-
-- `driver`: Network driver (default: `"bridge"`)
-- `subnet`: Custom subnet in CIDR format (e.g., `"10.89.0.0/16"`)
-- `gateway`: Custom gateway IP
-- `dns_servers`: List of custom DNS servers
-- `ipv6`: Enable IPv6 networking
-- `internal`: Restrict external network access
-
-**Connection methods:**
-
-- Host port: `http://localhost:11434` (from host machine)
-- Network alias: `http://ollama:11434` (from containers, recommended)
-- Host gateway: `http://host.containers.internal:11434` (from containers)
-
-## Tips
-
-- Use `airpods config validate` after manual edits
-- The `needs_webui_secret` flag automatically injects the webui secret
-- GPU detection is automatic; override with `gpu.force_cpu = true`
-- Network aliases simplify service URLs and improve performance
-- All changes are validated before saving
-
-## Runtime Support
-
-Airpods supports both Podman and Docker as interchangeable container runtimes.
-
-**Auto-detection** (`runtime.prefer = "auto"`):
-
-- Automatically detects available runtime
-- Prefers Podman when both are installed
-- Falls back to Docker if Podman is unavailable
-- Default and recommended setting
-
-**Podman** (`runtime.prefer = "podman"`):
-
-- Fully supported
-- Preferred runtime for airpods
-- Native pod management
-- Rootless container support
-- GPU passthrough via CDI or legacy flags
-
-**Docker** (`runtime.prefer = "docker"`):
-
-- Fully supported
-- Alternative runtime when Podman unavailable
-- Logical pod grouping with host networking
-- GPU passthrough via `--gpus` flag
-- Rootless mode supported with additional setup
-
-All commands work identically regardless of runtime. Use `airpods doctor` to check which runtime is active.
-
-Configuration repair commands (`init`, `edit`, and `reset`) work without an installed container runtime or a valid configuration. Help and version output also remain available. `start --wait` exits with status 1 if a service fails or does not become ready before the configured timeout.
+Each entry must set exactly one of `repo` or `path`. Git sources require `git`; local paths must exist and relative paths resolve under the state root. Requirements default to `requirements.txt` and install inside the running container; set `requirements = ""` to skip them. See [ComfyUI](../services/comfyui.md) for usage and mounts.

@@ -1,69 +1,17 @@
 # docs/plans/models-edit
 
-## Overview
+Status: proposed; `models edit`, `models create`, and `models tune` are not implemented.
 
-Future interface for editing Ollama model configurations, including Modelfiles, chat templates, and parameters. Deferred for later implementation.
+## Purpose
 
-## Proposed Command Structure
+Allow editing an Ollama Modelfile through `$EDITOR` and creating a model variant through Ollama. Keep the CLI focused on managing the existing runtime.
 
-### Primary Command
+## Proposed Behavior
 
-```bash
-airpods models edit <model> [subcommand]
-```
+- `airpods models edit <model>` would load its Modelfile, open an editor, validate the result, and ask for a destination name.
+- Replacing an existing model would require explicit confirmation and a recoverable copy of its previous definition.
+- Read/show and parameter-level editing could follow if the basic flow proves useful; the nested command syntax is undecided.
 
-### Subcommands
+## Implementation Work
 
-**Base edit** (`airpods models edit <model>`)
-
-- Opens Modelfile in `$EDITOR` for full editing
-- Prompts for new model name after save (creates variant or replaces original)
-- Mirrors `airpods config edit` pattern
-
-**show** (`airpods models edit <model> show`)
-
-- Display Modelfile with syntax highlighting
-- Optional `--format` flag (modelfile/json)
-
-**get** (`airpods models edit <model> get <key>`)
-
-- Retrieve specific Modelfile directive
-- Dot notation: `parameter.temperature`, `template`, `system`
-- Example: `airpods models edit llama3.2 get parameter.temperature`
-
-**set** (`airpods models edit <model> set <key> <value>`)
-
-- Update specific Modelfile directive
-- Auto-prompts for new model variant name
-- Example: `airpods models edit llama3.2 set parameter.temperature 0.7`
-
-**template** (`airpods models edit <model> template`)
-
-- Interactive template editor
-- Offers presets (ChatML, Llama2, Alpaca) or custom editing
-
-**validate** (`airpods models edit <model> validate`)
-
-- Syntax and compatibility checking before model creation
-
-## Design Considerations
-
-1. **Immutability**: Ollama models are immutable; edits create new variants or replace with confirmation
-2. **Template library**: Consider built-in common chat template presets
-3. **Quick tuning**: Potential shortcut command for common tweaks (`airpods models tune <model> --temperature 0.7`)
-4. **Backup strategy**: Auto-backup before in-place replacements
-
-## Integration Notes
-
-- Follows existing `config` command patterns for consistency
-- Leverages Ollama API for model creation from Modelfile
-- Should integrate with existing `models info` display
-- May require helper utilities in `airpods/ollama.py` for Modelfile parsing/generation
-
-## Alignment with Goals
-
-Per `docs/goals.md`:
-
-- Remains focused on orchestration, not replacing Ollama's native capabilities
-- Provides clear, safe-by-default commands
-- Uses configuration patterns established in airpods CLI
+Reuse the configuration editor conventions and Ollama model information helpers. Define creation/error handling in `airpods/ollama.py`, then test cancelled edits, invalid definitions, creation failures, and replacement behavior. Existing supported commands remain documented in [models](../commands/models.md).

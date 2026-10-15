@@ -50,6 +50,8 @@ airpods models pull bartowski/Llama-3.2-3B-Instruct-GGUF \
   --name llama3.2-3b-q4
 ```
 
+**Source selection:** `--source/-s ollama` overrides auto-detection for namespaced Ollama tags; `--source huggingface` (or `hf`) forces HuggingFace.
+
 **Options (for HuggingFace repos):**
 
 - `--file, -f`: Specify GGUF filename (otherwise prompted)
@@ -138,7 +140,7 @@ airpods models gguf pull https://example.com/model.gguf --name my-model.gguf
 
 ### `airpods models gguf remove <filename>`
 
-Delete a GGUF file from the shared GGUF store.
+Delete a GGUF file from the shared GGUF store immediately, without a confirmation prompt.
 
 ```bash
 airpods models gguf remove my-model.gguf
@@ -199,13 +201,13 @@ The following command aliases are available:
 
 ## Requirements
 
-- Ollama service must be running (`airpods start ollama`)
+- Ollama service must be running for `list`, `pull`, `info`, and `remove` (`airpods start ollama`). HuggingFace search and local `gguf` commands do not require Ollama.
 - `huggingface-hub` library (included in dependencies, for HuggingFace model pulls)
 - Internet connection for pulling models
 
 ## Notes
 
-- Models are stored in the Ollama data volume (`airpods_ollama_data`)
+- Ollama models are stored in `volumes/airpods_ollama_data`; `models gguf` operates on `volumes/airpods_models/gguf` under the state root. See [llama.cpp setup](../services/llamacpp.md).
 - Large models may take significant time to download
 - GGUF files are downloaded to HuggingFace cache then imported to Ollama
 - Model names support Ollama's tag syntax (e.g., `model:tag`)
