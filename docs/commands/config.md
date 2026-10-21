@@ -79,7 +79,7 @@ docker = ["docker"]
 
 `startup_timeout` and `startup_check_interval` control readiness polling with `start --wait`; failures/timeouts exit with status 1. `max_concurrent_pulls` accepts 1–10; `--sequential` overrides it. `auto_confirm` skips supported start/download/cleanup prompts. `skip_checks` bypasses dependency probing.
 
-For WebUI plugin ownership, `auto` reuses an admin or attempts to create the built-in admin on an empty database; `admin` reuses an admin and otherwise falls back to `system`. The legacy `airpods` mode currently falls back to `system`. See [plugin behavior](../../plugins/open-webui/README.md).
+For WebUI plugin ownership, `auto` reuses an existing admin and otherwise uses `system`; `admin` follows the same resolution but warns when no admin exists. The legacy `airpods` mode warns and uses `system`. Airpods never creates an Open WebUI account or default password. See [plugin behavior](../../plugins/open-webui/README.md).
 
 ## Services, Networking, and Templates
 
