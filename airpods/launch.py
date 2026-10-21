@@ -124,9 +124,6 @@ def _maybe_import_webui_plugins(
         return
 
     container_name = webui_specs[0].container
-    # ports is List[Tuple[host_port, container_port]]; first mapping is the HTTP port
-    webui_port = webui_specs[0].ports[0][0] if webui_specs[0].ports else 3000
-    base_url = f"http://localhost:{webui_port}"
     plugins_dir = plugins.get_plugins_target_dir()
 
     # The DB may not be ready immediately after container start; retry briefly.
@@ -155,31 +152,20 @@ def _maybe_import_webui_plugins(
                 plugins_dir,
                 admin_user_id=owner_id,
                 container_name=container_name,
+                managed_paths=plugins.managed_plugin_paths(plugins_dir),
             )
-            if imported:
+            if imported.succeeded:
                 console.print(
-                    f"[ok]✓ Auto-imported {len(imported)} plugin(s) into Open WebUI[/]"
+                    "[ok]Auto-imported Open WebUI plugins: "
+                    f"{imported.created} created, {imported.updated} updated, "
+                    f"{imported.migrated} migrated, {imported.unchanged} unchanged[/]"
                 )
-                token = plugins._webui_signin(
-                    base_url,
-                    plugins.DEFAULT_ADMIN_EMAIL,
-                    plugins.DEFAULT_ADMIN_PASSWORD,
-                )
-                if token:
-                    reloaded = plugins.reload_functions_via_api(
-                        base_url, token, imported
-                    )
-                    if verbose:
-                        console.print(
-                            f"[info]Reloaded {reloaded}/{len(imported)} plugin(s) into OWU memory[/]"
-                        )
-                elif verbose:
-                    console.print(
-                        "[info]Plugin hot-reload skipped — if you changed the admin "
-                        "password, restart OWU to activate new plugins[/]"
-                    )
             elif verbose:
                 console.print("[info]No new plugins to import (may already exist)[/]")
+            if imported.failed:
+                console.print(
+                    f"[warn]{imported.failed} Open WebUI plugin(s) failed to import[/]"
+                )
         except Exception as e:
             console.print(
                 f"[warn]Plugin auto-import failed: {e}. "

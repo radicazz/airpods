@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+import ast
+import base64
+import hashlib
 import json
+import re
 import shutil
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
-
-import requests
 
 from airpods.logging import console
 from airpods.paths import detect_repo_root
 from airpods.state import volumes_dir
 
-WEBUI_DB_PATH = "/app/backend/data/webui.db"
-AIRPODS_OWNER_ID = "airpods-system"
 SQLITE_LOCK_MARKERS = (
     "database is locked",
     "database table is locked",
@@ -25,22 +25,39 @@ SQLITE_LOCK_MARKERS = (
 SQLITE_IMPORT_MAX_ATTEMPTS = 6
 SQLITE_IMPORT_INITIAL_RETRY_DELAY = 0.25
 SQLITE_IMPORT_MAX_RETRY_DELAY = 2.0
-SQLITE_IMPORT_BUSY_TIMEOUT_MS = 30_000
 SQLITE_IMPORT_EXEC_TIMEOUT_SECONDS = 35
-
-DEFAULT_ADMIN_EMAIL = "admin@airpods"
-DEFAULT_ADMIN_PASSWORD = "admin"
-WEBUI_API_CONNECT_TIMEOUT = 5.0
-WEBUI_API_READ_TIMEOUT = 10.0
+PLUGIN_MANIFEST_NAME = ".airpods-open-webui-plugins.json"
+PLUGIN_MANIFEST_VERSION = 1
 
 
-class PluginModule(NamedTuple):
+@dataclass(frozen=True)
+class PluginModule:
     """Container for plugin metadata used during imports/listing."""
 
     id: str
+    legacy_id: str
     path: Path
     content: str
     function_type: str
+    name: str
+    description: str
+    manifest: dict
+
+
+@dataclass
+class PluginImportResult:
+    """Summary of a best-effort Open WebUI function import."""
+
+    modules: list[PluginModule]
+    created: int = 0
+    updated: int = 0
+    migrated: int = 0
+    unchanged: int = 0
+    failed: int = 0
+
+    @property
+    def succeeded(self) -> int:
+        return self.created + self.updated + self.migrated + self.unchanged
 
 
 def _is_sqlite_lock_error(output: str) -> bool:
@@ -63,37 +80,66 @@ def _is_sqlite_retryable_error(
 
 
 def _plugin_id_for_path(base_dir: Path, plugin_path: Path) -> str:
-    """Generate a stable, unique function id for a plugin file.
+    """Generate an identifier-safe, namespaced Open WebUI function ID."""
+    rel_no_suffix = plugin_path.relative_to(base_dir).with_suffix("")
+    normalized = re.sub(r"[^a-zA-Z0-9_]+", "_", rel_no_suffix.as_posix())
+    normalized = re.sub(r"_+", "_", normalized).strip("_").lower()
+    return f"airpods_{normalized}"
 
-    IDs are based on the relative path from the plugin root, with directory
-    separators normalized to dots so nested plugins with the same basename
-    do not collide (e.g., filters/foo.py -> filters.foo).
-    """
+
+def _legacy_plugin_id_for_path(base_dir: Path, plugin_path: Path) -> str:
     rel_no_suffix = plugin_path.relative_to(base_dir).with_suffix("")
     return rel_no_suffix.as_posix().replace("/", ".")
 
 
 def _detect_function_type(content: str) -> str | None:
-    """Best-effort guess of Open WebUI function type, or None for non-functions."""
-
-    lowered = content.lower()
-    if "def action(" in lowered:
-        return "action"
-    if "class pipeline" in lowered or "def pipe(" in lowered:
-        return "pipeline"
-    if "class filter" in lowered or "def inlet(" in lowered or "def outlet(" in lowered:
-        return "filter"
+    """Identify supported top-level Open WebUI function classes."""
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return None
+    class_names = {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
+    for class_name, function_type in (
+        ("Pipe", "pipe"),
+        ("Filter", "filter"),
+        ("Action", "action"),
+        ("Event", "event"),
+    ):
+        if class_name in class_names:
+            return function_type
     return None
 
 
-def _discover_function_plugins(base_dir: Path) -> list[PluginModule]:
-    """Return plugin modules that expose Filter/Pipeline/Action hooks."""
+def _plugin_frontmatter(content: str) -> dict[str, str]:
+    """Read simple key/value metadata from a module docstring."""
+    try:
+        docstring = ast.get_docstring(ast.parse(content), clean=False) or ""
+    except SyntaxError:
+        return {}
+    metadata: dict[str, str] = {}
+    for line in docstring.splitlines():
+        key, separator, value = line.partition(":")
+        if separator and re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", key.strip()):
+            metadata[key.strip().lower()] = value.strip()
+    return metadata
+
+
+def _discover_function_plugins(
+    base_dir: Path, relative_paths: set[Path] | None = None
+) -> list[PluginModule]:
+    """Return modules exposing current Open WebUI function classes."""
 
     if not base_dir.exists():
         return []
 
     modules: list[PluginModule] = []
-    for plugin_file in base_dir.rglob("*.py"):
+    plugin_files = (
+        [base_dir / path for path in sorted(relative_paths)]
+        if relative_paths is not None
+        else sorted(base_dir.rglob("*.py"))
+    )
+    seen_ids: set[str] = set()
+    for plugin_file in plugin_files:
         if plugin_file.name == "__init__.py" or plugin_file.name.startswith("_"):
             continue
         try:
@@ -102,12 +148,36 @@ def _discover_function_plugins(base_dir: Path) -> list[PluginModule]:
             console.print(f"[warn]Unable to read plugin file {plugin_file}: {exc}[/]")
             continue
 
+        try:
+            ast.parse(content)
+        except SyntaxError as exc:
+            console.print(f"[warn]Invalid plugin syntax in {plugin_file}: {exc}[/]")
+            continue
         function_type = _detect_function_type(content)
         if function_type is None:
             continue
 
         plugin_id = _plugin_id_for_path(base_dir, plugin_file)
-        modules.append(PluginModule(plugin_id, plugin_file, content, function_type))
+        if plugin_id in seen_ids:
+            console.print(
+                f"[warn]Duplicate generated plugin ID {plugin_id}; skipping {plugin_file}[/]"
+            )
+            continue
+        seen_ids.add(plugin_id)
+        metadata = _plugin_frontmatter(content)
+        modules.append(
+            PluginModule(
+                id=plugin_id,
+                legacy_id=_legacy_plugin_id_for_path(base_dir, plugin_file),
+                path=plugin_file,
+                content=content,
+                function_type=function_type,
+                name=metadata.get("title")
+                or plugin_file.stem.replace("_", " ").title(),
+                description=metadata.get("description", ""),
+                manifest=metadata,
+            )
+        )
 
     return modules
 
@@ -144,8 +214,9 @@ def sync_plugins(force: bool = False, prune: bool = True) -> int:
     """Sync bundled plugins to the webui_plugins volume directory.
 
     Args:
-        force: If True, overwrite existing plugins even if they're newer.
-        prune: If True, delete plugin files in target that no longer exist in source.
+        force: If True, overwrite managed targets even when content is identical.
+        prune: If True, remove only files tracked by the previous manifest and no
+            longer bundled. Unmanaged user files are always preserved.
 
     Returns:
         Number of plugins synced.
@@ -159,35 +230,81 @@ def sync_plugins(force: bool = False, prune: bool = True) -> int:
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    synced = 0
-    plugin_files = [
+    plugin_files = sorted(
         p
         for p in source_dir.rglob("*.py")
         if p.name != "__init__.py" and not p.name.startswith("_")
-    ]
-    desired_relpaths = {p.relative_to(source_dir) for p in plugin_files}
+    )
+    manifest_path = target_dir / PLUGIN_MANIFEST_NAME
+    previous_files: dict[str, str] = {}
+    if manifest_path.exists():
+        try:
+            previous = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if previous.get("version") == PLUGIN_MANIFEST_VERSION and isinstance(
+                previous.get("files"), dict
+            ):
+                previous_files = previous["files"]
+            else:
+                console.print(
+                    f"[warn]Ignoring unsupported plugin manifest: {manifest_path}[/]"
+                )
+        except (OSError, json.JSONDecodeError, AttributeError):
+            console.print(f"[warn]Ignoring invalid plugin manifest: {manifest_path}[/]")
+
+    synced = 0
+    managed_files: dict[str, str] = {}
 
     for plugin_file in plugin_files:
-        target_file = target_dir / plugin_file.relative_to(source_dir)
+        relative = plugin_file.relative_to(source_dir)
+        relative_name = relative.as_posix()
+        source_bytes = plugin_file.read_bytes()
+        digest = hashlib.sha256(source_bytes).hexdigest()
+        managed_files[relative_name] = digest
+        target_file = target_dir / relative
         target_file.parent.mkdir(parents=True, exist_ok=True)
-
         should_copy = force or not target_file.exists()
-        if not should_copy and target_file.exists():
-            source_mtime = plugin_file.stat().st_mtime
-            target_mtime = target_file.stat().st_mtime
-            should_copy = source_mtime > target_mtime
-
+        if not should_copy:
+            should_copy = hashlib.sha256(target_file.read_bytes()).hexdigest() != digest
         if should_copy:
             shutil.copy2(plugin_file, target_file)
             synced += 1
 
     if prune:
-        for existing in target_dir.rglob("*.py"):
-            rel = existing.relative_to(target_dir)
-            if rel not in desired_relpaths and existing.name != "__init__.py":
-                existing.unlink()
+        for relative_name in previous_files.keys() - managed_files.keys():
+            relative = Path(relative_name)
+            if relative.is_absolute() or ".." in relative.parts:
+                continue
+            stale = target_dir / relative
+            if stale.is_file():
+                stale.unlink()
+
+    manifest = {"version": PLUGIN_MANIFEST_VERSION, "files": managed_files}
+    manifest_content = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    if (
+        not manifest_path.exists()
+        or manifest_path.read_text(encoding="utf-8") != manifest_content
+    ):
+        temporary = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
+        temporary.write_text(manifest_content, encoding="utf-8")
+        temporary.replace(manifest_path)
 
     return synced
+
+
+def managed_plugin_paths(target_dir: Path | None = None) -> set[Path]:
+    """Return safe plugin paths owned by the current Airpods sync manifest."""
+    directory = target_dir or get_plugins_target_dir()
+    manifest_path = directory / PLUGIN_MANIFEST_NAME
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if manifest.get("version") != PLUGIN_MANIFEST_VERSION or not isinstance(
+        manifest.get("files"), dict
+    ):
+        return set()
+    paths = {Path(name) for name in manifest["files"]}
+    return {path for path in paths if not path.is_absolute() and ".." not in path.parts}
 
 
 def sync_comfyui_plugins(
@@ -390,154 +507,13 @@ finally:
     except Exception as exc:  # pragma: no cover - system specific
         console.print(f"[warn]Unable to query Open WebUI admin user: {exc}[/]")
         return None
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip()
+        if detail:
+            console.print(f"[warn]Unable to query Open WebUI admin user: {detail}[/]")
+        return None
     admin_id = (result.stdout or "").strip()
     return admin_id or None
-
-
-def _any_users_exist(runtime, container_name: str) -> bool:
-    """Check if any users exist in the Open WebUI database."""
-    code = """
-import sqlite3
-DB_PATH = r'/app/backend/data/webui.db'
-try:
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    for table in ("user", "users"):
-        try:
-            # table is from a hardcoded tuple — safe to interpolate
-            cur.execute(f"SELECT COUNT(*) FROM {table}")
-            count = cur.fetchone()[0]
-            if count > 0:
-                print("1")
-                break
-        except Exception:
-            continue
-    conn.close()
-except Exception:
-    pass
-"""
-    try:
-        result = _runtime_exec_python(runtime, container_name, code.strip(), timeout=8)
-    except Exception:  # pragma: no cover - system specific
-        return False
-    return (result.stdout or "").strip() == "1"
-
-
-def _ensure_default_admin(runtime, container_name: str) -> str | None:
-    """Create a default admin account with known credentials for first-time setup."""
-    code = f"""
-import json
-import sqlite3
-import time
-
-DB_PATH = r'{WEBUI_DB_PATH}'
-ADMIN_EMAIL = '{DEFAULT_ADMIN_EMAIL}'
-
-try:
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    hashed = pwd_context.hash("{DEFAULT_ADMIN_PASSWORD}")
-except Exception:
-    # Fallback to bcrypt directly if passlib not available
-    import bcrypt
-    hashed = bcrypt.hashpw("{DEFAULT_ADMIN_PASSWORD}".encode(), bcrypt.gensalt()).decode()
-
-try:
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    table = None
-    for candidate in ("user", "users"):
-        try:
-            cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                (candidate,),
-            )
-            if cur.fetchone():
-                table = candidate
-                break
-        except Exception:
-            continue
-
-    if not table:
-        raise RuntimeError("no user table found")
-
-    # Whitelist guard: table name comes from schema inspection above,
-    # but we double-check against the known set before using it in SQL.
-    if table not in ("user", "users"):
-        raise RuntimeError(f"unexpected user table name: {{table!r}}")
-
-    # Check if admin already exists
-    cur.execute(f"SELECT id FROM {{table}} WHERE email=?", (ADMIN_EMAIL,))
-    existing = cur.fetchone()
-    if existing:
-        print(existing[0])
-    else:
-        # Create new admin user
-        cols = [r[1] for r in cur.execute(f"PRAGMA table_info({{table}})").fetchall()]
-        now = int(time.time())
-
-        import uuid
-        admin_id = str(uuid.uuid4())
-
-        data = {{"id": admin_id, "email": ADMIN_EMAIL, "password": hashed}}
-        if "name" in cols:
-            data["name"] = "Admin"
-        if "username" in cols:
-            data["username"] = "admin"
-        if "role" in cols:
-            data["role"] = "admin"
-        if "profile_image_url" in cols:
-            data["profile_image_url"] = ""
-        if "is_admin" in cols:
-            data["is_admin"] = 1
-        if "is_active" in cols:
-            data["is_active"] = 1
-        if "active" in cols:
-            data["active"] = 1
-        if "timestamp" in cols:
-            data["timestamp"] = now
-        for key in ("created_at", "updated_at", "last_active_at"):
-            if key in cols:
-                data[key] = now
-        if "settings" in cols:
-            data["settings"] = json.dumps({{}})
-
-        fields = [k for k, v in data.items() if v is not None]
-        placeholders = ",".join("?" for _ in fields)
-        sql = f"INSERT INTO {{table}} ({{','.join(fields)}}) VALUES ({{placeholders}})"
-        cur.execute(sql, [data[k] for k in fields])
-        conn.commit()
-        print(admin_id)
-except Exception as e:
-    import traceback
-    print(f"ERROR: {{e}}", file=__import__('sys').stderr)
-    traceback.print_exc()
-finally:
-    try:
-        conn.close()
-    except Exception:
-        pass
-"""
-    try:
-        result = _runtime_exec_python(runtime, container_name, code.strip(), timeout=10)
-    except Exception as exc:  # pragma: no cover - system specific
-        console.print(f"[warn]Unable to create default admin: {exc}[/]")
-        return None
-
-    if result.returncode != 0 and result.stderr:
-        console.print(f"[warn]Error creating admin: {result.stderr}[/]")
-        return None
-
-    admin_id = (result.stdout or "").strip()
-    return admin_id or None
-
-
-def _ensure_airpods_owner(container_name: str) -> str | None:
-    """Create airpods-system user for 'airpods' mode (no password, cannot login)."""
-    # For backwards compatibility - creates a non-login system user
-    # This is only used when mode='airpods' explicitly
-    return None  # Deprecated in favor of default admin
 
 
 def resolve_plugin_owner_user_id(
@@ -545,10 +521,11 @@ def resolve_plugin_owner_user_id(
 ) -> str:
     """Resolve which WebUI user id should own imported plugins.
 
-    - auto: use an existing admin if possible; if no users exist, use 'system' to allow
-            normal first-user signup; only create airpods-system if users exist but no admin.
+    - auto: use an existing admin if possible, otherwise use ``system``.
     - admin: only use an existing admin, else fall back to 'system'.
-    - airpods: ensure airpods-system owner, else fall back to 'system'.
+    - airpods: legacy mode that falls back to ``system``.
+
+    Account creation is intentionally left to Open WebUI.
     """
     normalized = (mode or "auto").lower()
     if normalized not in {"auto", "admin", "airpods"}:
@@ -567,89 +544,135 @@ def resolve_plugin_owner_user_id(
             )
             return "system"
 
-    # In auto mode, create a default admin if no users exist
-    if normalized == "auto":
-        if not _any_users_exist(runtime, container_name):
-            admin_id = _ensure_default_admin(runtime, container_name)
-            if admin_id:
-                console.print(
-                    f"[info]Created default admin account: {DEFAULT_ADMIN_EMAIL} / {DEFAULT_ADMIN_PASSWORD} "
-                    "(change password in Settings)[/]"
-                )
-                return admin_id
-            return "system"
-
-    if normalized in {"auto", "airpods"}:
-        owner_id = _ensure_airpods_owner(container_name)
-        if owner_id:
-            return owner_id
-        if normalized == "airpods":
-            console.print(
-                "[warn]Unable to create airpods plugin owner; falling back to 'system'.[/]"
-            )
+    if normalized == "airpods":
+        console.print(
+            "[warn]cli.plugin_owner='airpods' is legacy behavior; plugins will be owned by 'system'.[/]"
+        )
 
     return "system"
 
 
-def _webui_signin(base_url: str, email: str, password: str) -> str | None:
-    """Obtain a JWT bearer token from Open WebUI via the signin endpoint.
+_IMPORT_PLUGIN_SCRIPT = r"""
+import base64
+import json
+import sqlite3
+import sys
+import time
 
-    Returns the token string on success, or None on any failure (connection
-    error, wrong credentials, unexpected response shape, etc.). The caller
-    is responsible for graceful degradation when None is returned.
-    """
-    url = f"{base_url.rstrip('/')}/api/v1/auths/signin"
-    try:
-        response = requests.post(
-            url,
-            json={"email": email, "password": password},
-            timeout=(WEBUI_API_CONNECT_TIMEOUT, WEBUI_API_READ_TIMEOUT),
-        )
-        response.raise_for_status()
-        data = response.json()
-        token = data.get("token")
-        return token if isinstance(token, str) and token else None
-    except requests.RequestException:
-        return None
-    except (ValueError, AttributeError, TypeError, KeyError):
-        # Unexpected response shape — OWU API may have changed
-        return None
+DB_PATH = "/app/backend/data/webui.db"
+payload = json.loads(base64.b64decode(sys.argv[1]).decode())
+conn = sqlite3.connect(DB_PATH, timeout=30)
+conn.execute("PRAGMA busy_timeout = 30000")
 
+def tables():
+    return {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
-def reload_functions_via_api(
-    base_url: str,
-    token: str,
-    modules: list[PluginModule],
-) -> int:
-    """Push each module into Open WebUI's live function cache via the update endpoint.
+def columns(table):
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
-    Calling POST /api/v1/functions/id/{id}/update causes OWU to re-exec the
-    function source and refresh its in-memory state — without this, functions
-    written directly to SQLite only become active after an OWU restart.
-
-    Returns the number of functions successfully reloaded. Per-module HTTP
-    errors are skipped; a connection-level failure short-circuits the loop
-    since remaining calls would also fail.
-    """
-    reloaded = 0
-    clean_url = base_url.rstrip("/")
-    headers = {"Authorization": f"Bearer {token}"}
-    for module in modules:
-        url = f"{clean_url}/api/v1/functions/id/{module.id}/update"
+def replace_json_reference(table, column, old, new):
+    if table not in tables() or column not in columns(table):
+        return
+    def replace(value):
+        if isinstance(value, dict):
+            return {
+                (new if key == old else key): replace(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [replace(item) for item in value]
+        return new if value == old else value
+    for row_id, raw in conn.execute(f"SELECT id, {column} FROM {table}").fetchall():
+        if not raw:
+            continue
         try:
-            response = requests.post(
-                url,
-                json={"id": module.id, "content": module.content},
-                headers=headers,
-                timeout=(WEBUI_API_CONNECT_TIMEOUT, WEBUI_API_READ_TIMEOUT),
+            value = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        updated = replace(value)
+        if updated != value:
+            conn.execute(
+                f"UPDATE {table} SET {column}=? WHERE id=?",
+                (json.dumps(updated), row_id),
             )
-            response.raise_for_status()
-            reloaded += 1
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            break  # OWU is unreachable; no point retrying remaining modules
-        except requests.RequestException:
-            pass  # Per-module HTTP error (404, 500, etc.); try remaining modules
-    return reloaded
+
+required = {
+    "id", "user_id", "name", "type", "content", "meta",
+    "created_at", "updated_at", "is_active", "is_global",
+}
+if "function" not in tables() or not required.issubset(columns("function")):
+    raise RuntimeError("unsupported Open WebUI function table schema")
+
+canonical = payload["id"]
+legacy = payload["legacy_id"]
+now = int(time.time())
+conn.execute("BEGIN IMMEDIATE")
+try:
+    current = conn.execute("SELECT id FROM function WHERE id=?", (canonical,)).fetchone()
+    old = None
+    if legacy != canonical:
+        old = conn.execute("SELECT id FROM function WHERE id=?", (legacy,)).fetchone()
+    if current and old:
+        raise RuntimeError(
+            f"both canonical and legacy function IDs exist: {canonical}, {legacy}"
+        )
+
+    migrated = bool(old and not current)
+    if migrated:
+        conn.execute("UPDATE function SET id=? WHERE id=?", (canonical, legacy))
+        if "function_history" in tables() and "function_id" in columns("function_history"):
+            conn.execute(
+                "UPDATE function_history SET function_id=? WHERE function_id=?",
+                (canonical, legacy),
+            )
+        for table, column in (("user", "settings"), ("users", "settings"), ("model", "meta")):
+            replace_json_reference(table, column, legacy, canonical)
+
+    existing = conn.execute(
+        "SELECT user_id, name, type, content, meta FROM function WHERE id=?",
+        (canonical,),
+    ).fetchone()
+    existing_meta = {}
+    if existing and existing[4]:
+        try:
+            existing_meta = json.loads(existing[4])
+        except (TypeError, json.JSONDecodeError):
+            existing_meta = {}
+    if not isinstance(existing_meta, dict):
+        existing_meta = {}
+    stored_meta_json = json.dumps(existing_meta, sort_keys=True)
+    existing_meta.update(payload["meta"])
+    meta_json = json.dumps(existing_meta, sort_keys=True)
+    desired = (
+        payload["user_id"], payload["name"], payload["type"],
+        payload["content"], meta_json,
+    )
+
+    if existing is None:
+        conn.execute(
+            "INSERT INTO function "
+            "(id, user_id, name, type, content, meta, created_at, updated_at, is_active, is_global) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)",
+            (canonical, *desired, now, now),
+        )
+        status = "created"
+    elif tuple(existing[:4]) + (stored_meta_json,) == desired:
+        status = "migrated" if migrated else "unchanged"
+    else:
+        conn.execute(
+            "UPDATE function SET user_id=?, name=?, type=?, content=?, meta=?, updated_at=? "
+            "WHERE id=?",
+            (*desired, now, canonical),
+        )
+        status = "migrated" if migrated else "updated"
+    conn.commit()
+except Exception:
+    conn.rollback()
+    raise
+finally:
+    conn.close()
+print(json.dumps({"status": status, "id": canonical}))
+"""
 
 
 def import_plugins_to_webui(
@@ -657,11 +680,13 @@ def import_plugins_to_webui(
     plugins_dir: Path,
     admin_user_id: str = "system",
     container_name: str = "open-webui-0",
-) -> list[PluginModule]:
-    """Import plugins directly into Open WebUI database via SQL.
+    managed_paths: set[Path] | None = None,
+) -> PluginImportResult:
+    """Import managed functions into Open WebUI's SQLite database.
 
-    This bypasses the API entirely and inserts functions directly into
-    the SQLite database using runtime exec.
+    Updates preserve Open WebUI-managed columns such as valves, activation,
+    global visibility, and creation time. Legacy dotted Airpods IDs are
+    migrated transactionally with known JSON references.
 
     Args:
         runtime: Container runtime instance
@@ -670,75 +695,46 @@ def import_plugins_to_webui(
         container_name: Name of the Open WebUI container
 
     Returns:
-        List of PluginModule objects that were successfully imported into the database.
+        A categorized best-effort import summary.
     """
     if not plugins_dir.exists():
         console.print(f"[warn]Plugins directory not found: {plugins_dir}[/]")
-        return []
+        return PluginImportResult([])
 
-    imported: list[PluginModule] = []
-    modules = _discover_function_plugins(plugins_dir)
-    timestamp = int(time.time())
+    paths = (
+        managed_paths
+        if managed_paths is not None
+        else managed_plugin_paths(plugins_dir)
+    )
+    modules = _discover_function_plugins(plugins_dir, paths)
+    summary = PluginImportResult([])
 
     for module in modules:
         try:
-            function_id = module.id
-            function_name = module.path.stem.replace("_", " ").title()
-            content = module.content
-            function_type = module.function_type
             rel_display = module.path.relative_to(plugins_dir).as_posix()
-
-            # Escape single quotes for SQL
-            content_escaped = content.replace("'", "''")
-
-            # Create meta JSON
-            meta = {
-                "description": f"Auto-imported from {rel_display} (type: {function_type})",
-                "manifest": {},
+            payload = {
+                "id": module.id,
+                "legacy_id": module.legacy_id,
+                "user_id": admin_user_id,
+                "name": module.name,
+                "type": module.function_type,
+                "content": module.content,
+                "meta": {
+                    "description": module.description
+                    or f"Managed by Airpods from {rel_display}",
+                    "manifest": module.manifest,
+                    "airpods_managed": True,
+                    "airpods_source": rel_display,
+                },
             }
-            meta_json = json.dumps(meta).replace("'", "''")
-
-            # Build SQL INSERT with ON CONFLICT (upsert)
-            sql = f"""
-            INSERT INTO function (
-                id, user_id, name, type, content, meta,
-                created_at, updated_at, is_active, is_global
-            ) VALUES (
-                '{function_id}',
-                '{admin_user_id}',
-                '{function_name}',
-                '{function_type}',
-                '{content_escaped}',
-                '{meta_json}',
-                {timestamp},
-                {timestamp},
-                1,
-                0
-            )
-            ON CONFLICT(id) DO UPDATE SET
-                user_id = excluded.user_id,
-                content = excluded.content,
-                updated_at = excluded.updated_at;
-            """
-
-            # Execute via runtime abstraction
-            python_code = (
-                "import sqlite3; "
-                f"conn = sqlite3.connect('{WEBUI_DB_PATH}', timeout=30); "
-                f"conn.execute('PRAGMA busy_timeout = {SQLITE_IMPORT_BUSY_TIMEOUT_MS}'); "
-                "cursor = conn.cursor(); "
-                f"cursor.execute({repr(sql)}); "
-                "conn.commit(); "
-                f"print('Imported {function_id}:', cursor.rowcount); "
-                "conn.close()"
-            )
+            encoded_payload = base64.b64encode(json.dumps(payload).encode()).decode()
 
             delay = SQLITE_IMPORT_INITIAL_RETRY_DELAY
             for attempt in range(1, SQLITE_IMPORT_MAX_ATTEMPTS + 1):
                 try:
                     result = runtime.exec_in_container(
                         container_name,
-                        ["python3", "-c", python_code],
+                        ["python3", "-c", _IMPORT_PLUGIN_SCRIPT, encoded_payload],
                         capture_output=True,
                         text=True,
                         timeout=SQLITE_IMPORT_EXEC_TIMEOUT_SECONDS,
@@ -758,9 +754,23 @@ def import_plugins_to_webui(
                 stderr = result.stderr or ""
                 details = "\n".join(part for part in (stdout, stderr) if part).strip()
 
-                if result.returncode == 0 and "Imported" in stdout:
-                    imported.append(module)
-                    break
+                if result.returncode == 0:
+                    try:
+                        response = json.loads(stdout.strip())
+                        status = response["status"]
+                        if status not in {
+                            "created",
+                            "updated",
+                            "migrated",
+                            "unchanged",
+                        }:
+                            raise ValueError("unknown status")
+                    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                        details = "invalid importer response"
+                    else:
+                        setattr(summary, status, getattr(summary, status) + 1)
+                        summary.modules.append(module)
+                        break
 
                 if attempt < SQLITE_IMPORT_MAX_ATTEMPTS and _is_sqlite_retryable_error(
                     details
@@ -770,14 +780,16 @@ def import_plugins_to_webui(
                     continue
 
                 if details:
-                    console.print(f"[warn]Failed to import {function_id}: {details}[/]")
+                    console.print(f"[warn]Failed to import {module.id}: {details}[/]")
                 else:
                     console.print(
-                        f"[warn]Failed to import {function_id}: exit code {result.returncode}[/]"
+                        f"[warn]Failed to import {module.id}: exit code {result.returncode}[/]"
                     )
+                summary.failed += 1
                 break
 
-        except Exception as e:
-            console.print(f"[error]Error importing {module.path.name}: {e}[/]")
+        except Exception as exc:
+            summary.failed += 1
+            console.print(f"[error]Error importing {module.path.name}: {exc}[/]")
 
-    return imported
+    return summary
