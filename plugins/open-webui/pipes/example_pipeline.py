@@ -1,83 +1,82 @@
 """
-title: Example Pipeline
-author: airpods
+title: Echo Pipe
+author: radicazz/airpods
 author_url: https://github.com/radicazz/airpods
-version: 0.1
-description: Example pipeline that intercepts and modifies messages
+version: 1.0.0
+description: Demonstrates a non-blocking Pipe with valves and optional status events.
 """
 
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
 from pydantic import BaseModel, Field
-from typing import Optional, AsyncIterator
-import time
 
 
-class Pipeline:
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content) if content is not None else ""
+
+    parts = []
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            text = item.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+    return "\n".join(parts)
+
+
+class Pipe:
     class Valves(BaseModel):
         prefix: str = Field(
-            default="🤖 ", description="Prefix to add to all assistant responses"
+            default="Echo: ", description="Prefix added to the generated response."
         )
-        simulate_delay: bool = Field(
-            default=False, description="Simulate processing delay for demonstration"
+        simulate_delay_seconds: float = Field(
+            default=0,
+            ge=0,
+            le=5,
+            description="Optional non-blocking demonstration delay in seconds.",
         )
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.valves = self.Valves()
-        self.name = "Example Pipeline"
+        self.name = "Echo Pipe"
 
     async def pipe(
         self,
         body: dict,
-        __user__: Optional[dict] = None,
+        __user__: dict | None = None,
         __event_emitter__=None,
         __request__=None,
-    ) -> str | AsyncIterator[str]:
-        """
-        Process the message body and optionally stream responses.
-
-        This pipeline demonstrates:
-        - Accessing user information
-        - Emitting status events
-        - Streaming responses
-        - Modifying message content
-        """
-        print(f"Pipeline processing for user: {__user__.get('email', 'unknown')}")
-
-        # Emit status event
-        if __event_emitter__:
+    ) -> str:
+        if __event_emitter__ is not None:
             await __event_emitter__(
                 {
                     "type": "status",
-                    "data": {"description": "Processing request...", "done": False},
+                    "data": {"description": "Preparing echo response", "done": False},
                 }
             )
 
-        # Simulate processing delay if enabled
-        if self.valves.simulate_delay:
+        if self.valves.simulate_delay_seconds:
+            await asyncio.sleep(self.valves.simulate_delay_seconds)
+
+        messages = body.get("messages")
+        latest = ""
+        if isinstance(messages, list):
+            for message in reversed(messages):
+                if isinstance(message, dict) and message.get("role") == "user":
+                    latest = _content_text(message.get("content"))
+                    break
+
+        if __event_emitter__ is not None:
             await __event_emitter__(
                 {
                     "type": "status",
-                    "data": {"description": "Thinking...", "done": False},
+                    "data": {"description": "Echo response ready", "done": True},
                 }
             )
-            time.sleep(1)
 
-        # Get the last user message
-        messages = body.get("messages", [])
-        if messages:
-            last_message = messages[-1].get("content", "")
-
-            # Generate a simple response with prefix
-            response = f"{self.valves.prefix}You said: {last_message}"
-
-            # Emit completion status
-            if __event_emitter__:
-                await __event_emitter__(
-                    {
-                        "type": "status",
-                        "data": {"description": "Complete!", "done": True},
-                    }
-                )
-
-            return response
-
-        return f"{self.valves.prefix}No message received"
+        return f"{self.valves.prefix}{latest or 'No user message received'}"
