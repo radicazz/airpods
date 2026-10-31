@@ -13,10 +13,11 @@ The default URL is `http://localhost:11435`; `/health` supplies readiness. CPU u
 
 ## Models and Arguments
 
-GGUF files live in `<state-root>/volumes/airpods_models/gguf/`, mounted at `/models`. Startup offers to download the configured default model when missing; `--yes` accepts that download. For another model:
+GGUF files live in `<state-root>/volumes/airpods_models/gguf/`, mounted at `/models`. The built-in default is `Qwen3.5-4B-heretic-Q4_K_M.gguf` from [saidutta69/Qwen3.5-4B-heretic](https://huggingface.co/saidutta69/Qwen3.5-4B-heretic). Existing configuration overrides remain in effect. Startup offers to download the configured default model when missing; `--yes` accepts that download. For another model:
 
 ```bash
-airpods models gguf pull https://example.com/model.gguf --name my-model.gguf
+airpods stop llamacpp
+airpods gguf pull https://example.com/model.gguf --name my-model.gguf
 airpods config set services.llamacpp.default_model my-model.gguf
 airpods config set services.llamacpp.default_model_url '' --type str
 airpods start llamacpp --wait
@@ -37,6 +38,12 @@ host = "0.0.0.0"
 ```
 
 Keys become kebab-case flags (`ctx_size` → `--ctx-size`). True booleans produce a flag, false booleans omit it, lists repeat the flag, and other values become separate arguments. Arguments are passed without shell interpolation. `entrypoint_override` can replace `/app/llama-server`.
+
+## Multiple Models
+
+Airpods starts llama.cpp with one explicit `--model`. Keeping multiple GGUF files in the store does not make them selectable in the built-in llama.cpp UI. Use the stop/configure/start sequence above to switch the served model.
+
+Upstream [llama.cpp router mode](https://github.com/ggml-org/llama.cpp/tree/master/tools/server#using-multiple-models) supports loading different models on demand and routing API requests by model name. It requires starting without `--model`, with `--models-dir /models` for this store; the built-in UI supports model selection in router mode. Airpods 0.26.1 keeps its single-model default. Using models simultaneously also requires enough RAM/VRAM; separate server instances need distinct host ports and container/pod names.
 
 ## Clients and Persistence
 

@@ -98,4 +98,8 @@ def test_llamacpp_command_args_template_resolution():
     resolved = resolve_templates(config)
 
     model_arg = resolved.services["llamacpp"].command_args.get("model")
-    assert model_arg == "/models/granite-4.0-h-1b-Q4_K_M.gguf"
+    assert model_arg == "/models/Qwen3.5-4B-heretic-Q4_K_M.gguf"
+    assert resolved.services["llamacpp"].default_model_url == (
+        "https://huggingface.co/saidutta69/Qwen3.5-4B-heretic/resolve/main/"
+        "Qwen3.5-4B-heretic-Q4_K_M.gguf"
+    )

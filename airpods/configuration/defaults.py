@@ -143,8 +143,8 @@ DEFAULT_CONFIG_DICT = {
             "env": {},
             "resources": {},
             "needs_webui_secret": False,
-            "default_model": "granite-4.0-h-1b-Q4_K_M.gguf",
-            "default_model_url": "https://huggingface.co/unsloth/granite-4.0-h-1b-GGUF/resolve/main/granite-4.0-h-1b-Q4_K_M.gguf",
+            "default_model": "Qwen3.5-4B-heretic-Q4_K_M.gguf",
+            "default_model_url": "https://huggingface.co/saidutta69/Qwen3.5-4B-heretic/resolve/main/Qwen3.5-4B-heretic-Q4_K_M.gguf",
             "command_args": {
                 "model": "/models/{{services.llamacpp.default_model}}",
                 "ctx_size": 4096,
