@@ -71,32 +71,32 @@ def downloads():
 
 
 def test_explicit_quant_prompts_for_mmproj_yes(downloads):
-    result = runner.invoke(app, ["models", "gguf", "pull", "o/r:Q4_K_M"], input="y\n")
+    result = runner.invoke(app, ["gguf", "pull", "o/r:Q4_K_M"], input="y\n")
     assert result.exit_code == 0, result.output
     assert [c[1] for c in downloads] == ["Qwen-4B-Q4_K_M.gguf", "mmproj-F16.gguf"]
 
 
 def test_mmproj_declined(downloads):
-    result = runner.invoke(app, ["models", "gguf", "pull", "o/r:Q8_0"], input="n\n")
+    result = runner.invoke(app, ["gguf", "pull", "o/r:Q8_0"], input="n\n")
     assert result.exit_code == 0, result.output
     assert [c[1] for c in downloads] == ["Qwen-4B-Q8_0.gguf"]
 
 
 def test_default_quant_is_q4_k_m(downloads):
-    result = runner.invoke(app, ["models", "gguf", "pull", "o/r", "--yes"])
+    result = runner.invoke(app, ["gguf", "pull", "o/r", "--yes"])
     assert result.exit_code == 0, result.output
     assert [c[1] for c in downloads] == ["Qwen-4B-Q4_K_M.gguf"]
 
 
 def test_mmproj_flag_with_yes(downloads):
-    result = runner.invoke(app, ["models", "gguf", "pull", "o/r", "-y", "--mmproj"])
+    result = runner.invoke(app, ["gguf", "pull", "o/r", "-y", "--mmproj"])
     assert result.exit_code == 0, result.output
     assert len(downloads) == 2
 
 
 @pytest.mark.parametrize("flags", [[], ["--yes"]])
 def test_unknown_quant_errors(downloads, flags):
-    result = runner.invoke(app, ["models", "gguf", "pull", "o/r:Q2_K", *flags])
+    result = runner.invoke(app, ["gguf", "pull", "o/r:Q2_K", *flags])
     assert result.exit_code == 1
     assert downloads == []
     assert "No file matches quant" in result.output
@@ -107,9 +107,7 @@ def test_multiple_projectors_with_yes_does_not_prompt(downloads):
         "airpods.ollama.list_gguf_files",
         return_value=[*FILES, _f("mmproj-Q8_0.gguf")],
     ):
-        result = runner.invoke(
-            app, ["models", "gguf", "pull", "o/r", "--yes", "--mmproj"]
-        )
+        result = runner.invoke(app, ["gguf", "pull", "o/r", "--yes", "--mmproj"])
     assert result.exit_code == 1
     assert "Multiple mmproj files" in result.output
     assert downloads == []
@@ -121,7 +119,7 @@ def test_hf_token_passed_to_discovery_and_download(downloads):
             download.return_value = (Path("/tmp/model.gguf"), 1)
             result = runner.invoke(
                 app,
-                ["models", "gguf", "pull", "o/r", "--yes", "--hf-token", "test-token"],
+                ["gguf", "pull", "o/r", "--yes", "--hf-token", "test-token"],
             )
     assert result.exit_code == 0, result.output
     listing.assert_called_once_with("o/r", hf_token="test-token")
@@ -152,7 +150,7 @@ def test_discovery_authenticates_hub_requests():
 def test_missing_default_quant_prompts_selection(downloads):
     files = [_f("a-Q8_0.gguf"), _f("a-Q5_0.gguf")]
     with patch("airpods.ollama.list_gguf_files", return_value=files):
-        result = runner.invoke(app, ["models", "gguf", "pull", "o/r"], input="1\n")
+        result = runner.invoke(app, ["gguf", "pull", "o/r"], input="1\n")
     assert result.exit_code == 0, result.output
     assert [c[1] for c in downloads] == ["a-Q5_0.gguf"]
 
@@ -161,8 +159,6 @@ def test_url_pull_unchanged():
     with patch(
         "airpods.gguf.download_model", return_value=(Path("/tmp/x.gguf"), 5)
     ) as dm:
-        result = runner.invoke(
-            app, ["models", "gguf", "pull", "https://example.com/x.gguf"]
-        )
+        result = runner.invoke(app, ["gguf", "pull", "https://example.com/x.gguf"])
     assert result.exit_code == 0
     dm.assert_called_once()

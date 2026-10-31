@@ -64,7 +64,8 @@ uv tool install "git+https://github.com/radicazz/airpods.git@main"
 ## Documentation
 
 - [Configuration and state paths](docs/commands/config.md)
-- [Models and GGUF downloads](docs/commands/models.md)
+- [Ollama models](docs/commands/models.md)
+- [GGUF downloads and search](docs/commands/gguf.md)
 - [llama.cpp setup](docs/services/llamacpp.md)
 - [ComfyUI setup](docs/services/comfyui.md) and [workflow/model sync](docs/commands/workflows.md)
 - [Backups, restore, and cleanup](docs/commands/state.md)

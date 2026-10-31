@@ -1,4 +1,4 @@
-"""Tests for the models search command."""
+"""Tests for the gguf search command."""
 
 from __future__ import annotations
 
@@ -33,12 +33,12 @@ def mock_hf_search():
     ]
 
 
-def test_models_search_basic(mock_hf_search):
+def test_gguf_search_basic(mock_hf_search):
     """Test basic search functionality."""
     with patch("airpods.ollama.search_huggingface_models") as mock_hf:
         mock_hf.return_value = mock_hf_search
 
-        result = runner.invoke(app, ["models", "search", "llama"])
+        result = runner.invoke(app, ["gguf", "search", "llama"])
 
         assert result.exit_code == 0
         assert "Searching HuggingFace for llama" in result.stdout
@@ -47,46 +47,46 @@ def test_models_search_basic(mock_hf_search):
         assert "42 likes" in result.stdout
 
 
-def test_models_search_with_limit(mock_hf_search):
+def test_gguf_search_with_limit(mock_hf_search):
     """Test search with custom limit."""
     with patch("airpods.ollama.search_huggingface_models") as mock_hf:
         mock_hf.return_value = mock_hf_search
 
-        result = runner.invoke(app, ["models", "search", "--limit", "10", "llama"])
+        result = runner.invoke(app, ["gguf", "search", "--limit", "10", "llama"])
 
         assert result.exit_code == 0
         # Verify the limit was passed
         mock_hf.assert_called_once_with("llama", 10)
 
 
-def test_models_search_no_results():
+def test_gguf_search_no_results():
     """Test search with no results."""
     with patch("airpods.ollama.search_huggingface_models") as mock_hf:
         mock_hf.return_value = []
 
-        result = runner.invoke(app, ["models", "search", "nonexistent"])
+        result = runner.invoke(app, ["gguf", "search", "nonexistent"])
 
         assert result.exit_code == 0
         assert "No results found" in result.stdout
         assert "Browse models:" in result.stdout
 
 
-def test_models_search_missing_query():
+def test_gguf_search_missing_query():
     """Test search without providing a query."""
-    result = runner.invoke(app, ["models", "search"])
+    result = runner.invoke(app, ["gguf", "search"])
 
     assert result.exit_code == 1
     assert "Missing argument" in result.stdout
 
 
-def test_models_search_api_error():
+def test_gguf_search_api_error():
     """Test search when API fails."""
     with patch("airpods.ollama.search_huggingface_models") as mock_hf:
         from airpods.ollama import OllamaAPIError
 
         mock_hf.side_effect = OllamaAPIError("API failed")
 
-        result = runner.invoke(app, ["models", "search", "llama"])
+        result = runner.invoke(app, ["gguf", "search", "llama"])
 
         assert result.exit_code == 1
         assert "Search failed" in result.stdout

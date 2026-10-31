@@ -12,7 +12,8 @@ Maintain a Rich + Typer CLI that orchestrates local AI services through Podman o
 - `status [service...]` (`ps`, `info`): compact Service / Status / Info table with HTTP health and URLs or stopped pod/port information.
 - `logs [service...]`: logs with follow, since, and line-count options.
 - `doctor` (`health`): inspect dependencies, runtime/GPU setup, llama.cpp resources, and legacy ComfyUI imports without changing pods or volumes.
-- `models` (`model`): Ollama `list` (`ls`), `pull`, `info`, `remove` (`rm`), HuggingFace GGUF `search`, and local `gguf list/pull/remove`. Search and local GGUF operations do not need a running Ollama service. See [model commands](docs/commands/models.md).
+- `models` (`model`): Ollama `list` (`ls`), `pull`, `info`, and `remove` (`rm`). See [model commands](docs/commands/models.md).
+- `gguf`: standalone `list` (`ls`), `pull`, `remove`, and HuggingFace `search`. These commands do not need a running Ollama service. See [GGUF commands](docs/commands/gguf.md).
 - `workflows`: `add`, `list` (`ls`), `sync`, `desync`, `pull`, `remove` (`delete`), `path`, and `api`. See [workflow commands](docs/commands/workflows.md).
 - `state`: `backup`, `restore`, and `clean`. Backups include configs, a consistent WebUI SQLite snapshot, WebUI plugins, Ollama metadata, and non-GGUF files in the GGUF store; model binaries are excluded. Restore requires WebUI to be stopped when restoring its database. `clean` requires target flags, supports `--dry-run`, and confirms unless `--force` or configured auto-confirm is used. See [state commands](docs/commands/state.md).
 - `config`: `init`, `show`, `path`, `edit`, `validate`, `reset`, `get`, and `set`. Help/version and configuration repair work without a runtime or valid active config. See [configuration](docs/commands/config.md).

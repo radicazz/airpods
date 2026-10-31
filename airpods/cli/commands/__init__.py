@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from . import config, doctor, logs, models, start, state, status, stop, workflows
+from . import config, doctor, gguf, logs, models, start, state, status, stop, workflows
 from ..common import ALIAS_HELP_TEMPLATE, COMMAND_ALIASES, COMMAND_CONTEXT
 from ..type_defs import CommandMap
 
@@ -13,6 +13,7 @@ COMMAND_MODULES = [
     status,
     logs,
     models,
+    gguf,
     workflows,
     config,
     state,

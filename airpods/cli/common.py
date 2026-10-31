@@ -104,7 +104,7 @@ COMMAND_ALIASES = {
 }
 
 # SUBCOMMAND_ALIASES map group local name -> (alias -> canonical) for subcommands
-# inside groups like "models", "workflows", and "gguf" (models gguf).
+# inside groups like "models", "workflows", and "gguf".
 # Used both for registering hidden aliases on the sub apps and for alias column
 # display in their help tables.
 SUBCOMMAND_ALIASES: dict[str, dict[str, str]] = {

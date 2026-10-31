@@ -151,13 +151,13 @@ def test_workflows_ls_alias(mock_dir, runner, tmp_path):
     assert result.exit_code == 0
 
 
-@patch("airpods.cli.commands.models._gguf_dir")
+@patch("airpods.cli.commands.gguf._gguf_dir")
 def test_gguf_ls_alias(mock_dir, runner, tmp_path):
-    """'models gguf ls' aliases 'models gguf list'."""
+    """'gguf ls' aliases 'gguf list'."""
     mock_dir.return_value = tmp_path
     # Create an empty directory
     tmp_path.mkdir(exist_ok=True)
 
-    result = runner.invoke(app, ["models", "gguf", "ls"])
+    result = runner.invoke(app, ["gguf", "ls"])
     assert result.exit_code == 0
     assert "No GGUF models found" in result.output

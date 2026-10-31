@@ -300,9 +300,7 @@ def register(app: typer.Typer) -> CommandMap:
                 if not model_path.exists():
                     console.print(f"[warn]llamacpp model not found: {model_path}[/]")
                     if llamacpp_cfg.default_model_url:
-                        console.print(
-                            "[info]Default model is configured (small GGUF for most PCs).[/]"
-                        )
+                        console.print("[info]Default model is configured.[/]")
                         if yes or ui.confirm_action(
                             "Download the default model now?", default=True
                         ):
@@ -323,8 +321,7 @@ def register(app: typer.Typer) -> CommandMap:
                                 "[info]Download a GGUF file into the store, then retry:[/]"
                             )
                             console.print(
-                                "[info]  airpods models gguf pull <url> --name "
-                                f"{rel}[/]"
+                                f"[info]  airpods gguf pull <url> --name {rel}[/]"
                             )
                             raise typer.Exit(code=1)
                     else:
@@ -332,7 +329,7 @@ def register(app: typer.Typer) -> CommandMap:
                             "[info]Download a GGUF file into the store, then retry:[/]"
                         )
                         console.print(
-                            f"[info]  airpods models gguf pull <url> --name {rel}[/]"
+                            f"[info]  airpods gguf pull <url> --name {rel}[/]"
                         )
                         raise typer.Exit(code=1)
 
