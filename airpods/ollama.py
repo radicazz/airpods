@@ -336,12 +336,15 @@ def generate_model_name_from_repo(repo_id: str, filename: Optional[str] = None) 
     return f"{name}{quant}"
 
 
-def list_gguf_files(repo_id: str) -> list[dict[str, Any]]:
+def list_gguf_files(
+    repo_id: str, *, hf_token: str | None = None
+) -> list[dict[str, Any]]:
     """
     List GGUF files available in a HuggingFace repository.
 
     Args:
         repo_id: HuggingFace repo ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF")
+        hf_token: Optional token for gated or private repositories.
 
     Returns:
         List of dicts with keys: filename, size
@@ -353,7 +356,7 @@ def list_gguf_files(repo_id: str) -> list[dict[str, Any]]:
         from huggingface_hub import list_repo_files, repo_info
 
         # List all files in the repo
-        files = list_repo_files(repo_id)
+        files = list_repo_files(repo_id, token=hf_token)
 
         # Filter for GGUF files
         gguf_files = [f for f in files if f.lower().endswith(".gguf")]
@@ -362,7 +365,7 @@ def list_gguf_files(repo_id: str) -> list[dict[str, Any]]:
             raise OllamaAPIError(f"No GGUF files found in repository '{repo_id}'")
 
         # Get file sizes
-        info = repo_info(repo_id)
+        info = repo_info(repo_id, token=hf_token)
         result = []
 
         for filename in gguf_files:

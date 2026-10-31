@@ -129,14 +129,24 @@ airpods models gguf list
 airpods models gguf ls
 ```
 
-### `airpods models gguf pull <url>`
+### `airpods models gguf pull <url-or-repo>`
 
-Download a GGUF file directly to the shared GGUF store.
+Download a GGUF file to the shared GGUF store. Accepts a direct URL or a HuggingFace spec in the same form as `llama-server -hf`: `owner/repo[:QUANT]` (a leading `hf.co/` or `huggingface.co/` is accepted).
 
 ```bash
 airpods models gguf pull https://example.com/model.gguf
 airpods models gguf pull https://example.com/model.gguf --name my-model.gguf
+airpods models gguf pull saidutta69/Qwen3.5-4B-heretic:Q4_K_M
+airpods models gguf pull bartowski/Llama-3.2-3B-Instruct-GGUF --yes
 ```
+
+HuggingFace specs:
+
+- The quant tag is matched case-insensitively against filenames as a whole token (`Q4_K` does not match `Q4_K_M`). Without a tag, `Q4_K_M` is used.
+- If the default quant is missing or several files match, you are prompted to choose. An explicit tag with no match is an error.
+- Split GGUFs (`-00001-of-0000N`) are downloaded as a group.
+- If the repo has an `mmproj` file, you are prompted whether to download it (and which one, if several). `--mmproj` / `--no-mmproj` answer in advance; `--yes` (or `cli.auto_confirm`) skips mmproj unless `--mmproj` is given, and fails on ambiguous matches.
+- `--hf-token` (or `HF_TOKEN`) supports gated repos. `--name` only applies to a single file.
 
 ### `airpods models gguf remove <filename>`
 
