@@ -175,3 +175,20 @@ def test_status_is_compact_and_preserves_crash_details(monkeypatch):
     table = console.print.call_args[0][0]
     assert [column.header for column in table.columns] == ["Service", "Status", "Info"]
     assert "failed (exit 127)" in table.columns[1]._cells[0]
+
+
+def test_webui_db_ready_false_when_runtime_exec_fails(monkeypatch):
+    from types import SimpleNamespace
+
+    from airpods import launch
+    from airpods.runtime import ContainerRuntimeError
+
+    def _fail(*_a, **_kw):
+        raise ContainerRuntimeError("container not running")
+
+    monkeypatch.setattr(
+        launch,
+        "manager",
+        SimpleNamespace(runtime=SimpleNamespace(exec_in_container=_fail)),
+    )
+    assert launch._webui_db_ready("webui") is False

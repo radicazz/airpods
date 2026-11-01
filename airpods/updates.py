@@ -58,7 +58,7 @@ def detect_install_source() -> InstallSource:
         if not direct_url_text:
             return InstallSource(kind="wheel_or_index")
         data = json.loads(direct_url_text)
-    except Exception:
+    except (ImportError, OSError, ValueError):
         return InstallSource(kind="wheel_or_index")
 
     vcs_info = data.get("vcs_info") if isinstance(data, dict) else None
@@ -144,12 +144,12 @@ def check_for_update(
                 html_url = str(cached.get("html_url") or "").strip()
                 if tag and version:
                     return ReleaseInfo(tag=tag, version=version, html_url=html_url)
-        except Exception:
+        except (OSError, ValueError, AttributeError, TypeError):
             pass
 
     try:
         latest = fetch_latest_release(timeout_seconds=timeout_seconds)
-    except Exception:
+    except (requests.RequestException, RuntimeError, ValueError):
         return None
 
     try:
@@ -163,7 +163,7 @@ def check_for_update(
                 },
                 f,
             )
-    except Exception:
+    except OSError:
         pass
     return latest
 

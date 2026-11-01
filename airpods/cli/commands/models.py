@@ -246,7 +246,7 @@ def _pull_from_ollama(model: str, port: int) -> None:
         try:
             info = ollama.show_model(model, port)
             model_size = info.get("size", 0) if isinstance(info, dict) else 0
-        except Exception:
+        except ollama.OllamaAPIError:
             model_size = 0
 
         elapsed = time.time() - start_time

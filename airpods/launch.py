@@ -14,12 +14,14 @@ API yet.
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from airpods.cli.common import manager
 from airpods.logging import console, status_spinner
+from airpods.runtime import ContainerRuntimeError
 from airpods.services import ServiceSpec
 
 if TYPE_CHECKING:
@@ -62,7 +64,7 @@ except Exception:
             timeout=6,
             check=False,
         )
-    except Exception:
+    except (ContainerRuntimeError, OSError, subprocess.SubprocessError):
         return False
     return result.returncode == 0
 
@@ -422,7 +424,8 @@ def perform_start(
                     f"[warn]Update available:[/] {latest.tag} (installed: v{_airpods_version})"
                 )
                 console.print(f"[dim]{hint}[/dim]")
-        except Exception:
+        except (OSError, RuntimeError, ValueError, ImportError):
+            # Update checks are a courtesy and must never break startup.
             pass
         return
 

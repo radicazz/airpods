@@ -102,3 +102,37 @@ description = "Test"
         assert result.version == "1.2.3"
         assert result.tag == "v1.2.3"
         assert "github.com/radicazz/airpods" in result.html_url
+
+
+def test_detect_install_source_falls_back_on_missing_or_bad_metadata():
+    from importlib.metadata import PackageNotFoundError
+
+    def _missing(_name):
+        raise PackageNotFoundError("airpods")
+
+    with patch("importlib.metadata.distribution", _missing):
+        assert detect_install_source().kind == "wheel_or_index"
+
+    def _bad_json(_name):
+        return SimpleNamespace(read_text=lambda _f: "{not json")
+
+    with patch("importlib.metadata.distribution", _bad_json):
+        assert detect_install_source().kind == "wheel_or_index"
+
+
+def test_check_for_update_returns_none_on_network_failure(tmp_path, monkeypatch):
+    import requests
+
+    from airpods import updates
+
+    monkeypatch.delenv("AIRPODS_NO_UPDATE_CHECK", raising=False)
+    set_state_root(tmp_path)
+    try:
+
+        def _boom(**_kw):
+            raise requests.ConnectionError("offline")
+
+        with patch.object(updates, "fetch_latest_release", _boom):
+            assert updates.check_for_update(force=True, interactive_only=False) is None
+    finally:
+        clear_state_root_override()
