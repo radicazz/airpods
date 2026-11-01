@@ -41,7 +41,7 @@ Maintain a Rich + Typer CLI that orchestrates local AI services through Podman o
 ## Testing and Development
 
 - Tests mock subprocess/container interactions and isolate state via `AIRPODS_HOME`. Add meaningful regression coverage for runtime failures; live container/GPU checks are separate from mocked tests.
-- Run `uv sync --all-extras`, `uv run pytest`, and `uv run pre-commit run --all-files` before finishing. The full suite enforces 55% coverage; targeted debugging can use `--no-cov` but does not replace the full check.
+- Run `uv sync --all-extras`, `uv run pytest`, and `uv run pre-commit run --all-files` before finishing. The full suite enforces 60% coverage; targeted debugging can use `--no-cov` but does not replace the full check.
 - Format with `uv format` or `uv format -- <paths>`. Pre-commit also checks Markdown/YAML/TOML with Prettier, file hygiene, the full pytest suite with coverage, and `python3 -m compileall airpods`.
 - `.github/workflows/test.yml` runs tests on Ubuntu 24.04 with Python 3.10–3.13 selected through `UV_PYTHON`. Only Python 3.13 publishes coverage. Its `quality` job runs all pre-commit checks on Python 3.13.
 - Before committing, update `pyproject.toml` and `uv.lock`: patch bump for fixes/small improvements; minor for large features or meaningful command additions; major for breaking changes.
