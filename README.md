@@ -85,6 +85,8 @@ uv run pytest
 uv run pre-commit run --all-files
 ```
 
+Run `uv sync --all-extras` first: a bare `uv run pytest` in a fresh checkout can fail with `ModuleNotFoundError: No module named 'typer'` because the dev extras and dependencies are not installed yet.
+
 See [AGENTS.md](AGENTS.md) for versioning and commit conventions.
 
 ## License
