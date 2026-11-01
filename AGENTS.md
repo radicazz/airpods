@@ -27,6 +27,7 @@ Maintain a Rich + Typer CLI that orchestrates local AI services through Podman o
 - `airpods/_container_cli.py`: shared subprocess/volume/image/container helpers. Keep stderr separate from captured stdout so warnings cannot corrupt JSON or formatted output; include both streams in failure diagnostics. Distinguish missing containers from runtime failures.
 - `gpu.py`, `system.py`, `cuda.py`, and `comfyui.py`: dependency/GPU checks, runtime-specific GPU flags, CUDA/provider selection, and provider-specific mounts. `gguf.py`, `ollama.py`, and `files.py`: model operations and managed file/download helpers.
 - `state.py` and `paths.py`: state directories, secrets, and repo detection. The active config determines the state root; explicit `AIRPODS_HOME` isolates discovery when no `AIRPODS_CONFIG` is set. See the exact precedence and layout in [configuration](docs/commands/config.md).
+- `workflow_refs.py`: pure ComfyUI workflow model-reference extraction used by `cli/commands/workflows.py`.
 - `plugins.py` and `custom_nodes.py`: bundled plugin sync, best-effort WebUI database imports, and configured ComfyUI git/local node installation. See the plugin READMEs and nested AGENTS instructions before modifying them.
 - Installed entrypoint: `airpods.cli:main` from `pyproject.toml`. `podcli` wraps local uv/Python execution.
 
