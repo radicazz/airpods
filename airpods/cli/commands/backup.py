@@ -249,21 +249,13 @@ def _extract_image_tag(image: str) -> str:
     return "latest"
 
 
-def _inspect_image_version(image: str) -> Optional[str]:
-    # TODO: Implement runtime-aware image inspection if needed
-    # For now, version labels are not critical for backups
-    return None
-
-
 def _service_manifest(spec: Optional[Any]) -> Dict[str, Any]:
     if spec is None:
         return {}
-    version = _inspect_image_version(spec.image)
     return {
         "image": spec.image,
         "image_tag": _extract_image_tag(spec.image),
         "container": spec.container,
-        "version_label": version,
     }
 
 
